@@ -111,7 +111,7 @@ static clockid_t monotonic_clkid = -1;
 /* Linux 2.6.22 (commit 83f7d958eab2fbc6b159ee92bf1493924e1d0f72) adds a busnum
  * to sysfs, so we can relate devices. This also implies that we can read
  * the active configuration through bConfigurationValue */
-static int sysfs_can_relate_devices = -1;
+static int sysfs_can_relate_devices = 0;
 
 /* Linux 2.6.26 (commit 217a9081d8e69026186067711131b77f0ce219ed) adds all
  * config descriptors (rather then just the active config) to the sysfs
@@ -349,6 +349,22 @@ static int kernel_version_ge(int major, int minor, int sublevel)
 		return 0 == sublevel;
 
 	return ksublevel >= sublevel;
+}
+
+/* Return 1 if filename exists inside dirname in sysfs.
+   SYSFS_DEVICE_PATH is assumed to be the beginning of the path. */
+static int sysfs_has_file(const char *dirname, const char *filename)
+{
+	struct stat statbuf;
+	char path[PATH_MAX];
+	int r;
+
+	snprintf(path, PATH_MAX, "%s/%s/%s", SYSFS_DEVICE_PATH, dirname, filename);
+	r = stat(path, &statbuf);
+	if (r == 0 && S_ISREG(statbuf.st_mode))
+		return 1;
+
+	return 0;
 }
 
 static int op_init(struct libusb_context *ctx)
