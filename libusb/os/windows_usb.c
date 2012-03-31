@@ -139,13 +139,11 @@ static char* guid_to_string(const GUID* guid)
 		guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7]);
 	return guid_string;
 }
-#endif
 
 /*
  * Converts a windows error to human readable string
  * uses retval as errorcode, or, if 0, use GetLastError()
  */
-#if defined(ENABLE_LOGGING)
 static char *windows_error_str(uint32_t retval)
 {
 static char err_string[ERR_BUFFER_SIZE];
@@ -176,7 +174,6 @@ static char err_string[ERR_BUFFER_SIZE];
 	}
 	return err_string;
 }
-#endif
 
 /*
  * Sanitize Microsoft's paths: convert to uppercase, add prefix and fix backslashes.

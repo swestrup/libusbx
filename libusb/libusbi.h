@@ -173,6 +173,9 @@ void usbi_log_v(struct libusb_context *ctx, enum libusb_log_level level,
 
 /* Old MS compilers don't support variadic macros. The code is simple, so we
  * repeat it for each loglevel. Note that the debug case is special.
+ *
+ * Support for variadic macros was introduced in Visual C++ 2005.
+ * http://msdn.microsoft.com/en-us/library/ms177415%28v=VS.80%29.aspx
  */
 
 static inline void usbi_info(struct libusb_context *ctx, const char *fmt, ...)
