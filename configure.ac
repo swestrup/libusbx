@@ -44,6 +44,9 @@ AC_DEFINE([_GNU_SOURCE], 1, [Use GNU extensions])
 
 LTLDFLAGS="${LTLDFLAGS} -no-undefined"
 
+CFLAGS="-g -O"
+
+
 AC_MSG_CHECKING([operating system])
 
 case $host in
