@@ -139,6 +139,7 @@ static char* guid_to_string(const GUID* guid)
 		guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7]);
 	return guid_string;
 }
+#endif
 
 /*
  * Converts a windows error to human readable string
