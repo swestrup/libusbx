@@ -70,6 +70,10 @@ case $host in
 	backend="bsd"
 	threads="posix"
 	;;
+*-netbsd*)
+	AC_MSG_RESULT([NetBSD (using OpenBSD backend)])
+	backend="openbsd"
+	;;
 *-mingw*)
 	AC_MSG_RESULT([Windows])
 	backend="windows"
