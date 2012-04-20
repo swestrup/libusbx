@@ -1,5 +1,8 @@
+diff --git a/libusb-debug-logging-fixed.patch b/libusb-debug-logging-fixed.patch
+new file mode 100644
+index 0000000..e69de29
 diff --git a/libusb/core.c b/libusb/core.c
-index 7e4fd24..b494335 100644
+index 7e4fd24..8b7910e 100644
 --- a/libusb/core.c
 +++ b/libusb/core.c
 @@ -471,7 +471,7 @@ struct discovered_devs *discovered_devs_append(
@@ -170,7 +173,16 @@ index 7e4fd24..b494335 100644
  	if (usbi_backend->attach_kernel_driver)
  		return usbi_backend->attach_kernel_driver(dev, interface);
  	else
-@@ -1462,13 +1461,22 @@ API_EXPORTED int libusb_init(libusb_context **context)
+@@ -1416,6 +1415,8 @@ API_EXPORTED int libusb_attach_kernel_driver(libusb_device_handle *dev,
+  *  - Level 2: warning and error messages are printed to stderr
+  *  - Level 3: informational messages are printed to stdout, warning and error
+  *    messages are printed to stderr
++ *  - Level 4: informational messages are printed to stdout, debugging,
++ *    warning and error messages are printed to stderr
+  *
+  * The default level is 0, which means no messages are ever printed. If you
+  * choose to increase the message verbosity level, ensure that your
+@@ -1462,13 +1463,22 @@ API_EXPORTED int libusb_init(libusb_context **context)
  		return LIBUSB_ERROR_NO_MEM;
  	memset(ctx, 0, sizeof(*ctx));
  
@@ -196,7 +208,7 @@ index 7e4fd24..b494335 100644
  
  	if (usbi_backend->init) {
  		r = usbi_backend->init(ctx);
-@@ -1489,8 +1497,8 @@ API_EXPORTED int libusb_init(libusb_context **context)
+@@ -1489,8 +1499,8 @@ API_EXPORTED int libusb_init(libusb_context **context)
  	}
  
  	pthread_mutex_lock(&default_context_lock);
@@ -207,7 +219,7 @@ index 7e4fd24..b494335 100644
  		usbi_default_context = ctx;
  	}
  	pthread_mutex_unlock(&default_context_lock);
-@@ -1512,7 +1520,7 @@ err:
+@@ -1512,7 +1522,7 @@ err:
  API_EXPORTED void libusb_exit(struct libusb_context *ctx)
  {
  	USBI_GET_CONTEXT(ctx);
@@ -216,7 +228,7 @@ index 7e4fd24..b494335 100644
  
  	/* a little sanity check. doesn't bother with open_devs locking because
  	 * unless there is an application bug, nobody will be accessing this. */
-@@ -1525,7 +1533,7 @@ API_EXPORTED void libusb_exit(struct libusb_context *ctx)
+@@ -1525,7 +1535,7 @@ API_EXPORTED void libusb_exit(struct libusb_context *ctx)
  
  	pthread_mutex_lock(&default_context_lock);
  	if (ctx == usbi_default_context) {
@@ -225,17 +237,16 @@ index 7e4fd24..b494335 100644
  		usbi_default_context = NULL;
  	}
  	pthread_mutex_unlock(&default_context_lock);
-@@ -1540,15 +1548,11 @@ void usbi_log(struct libusb_context *ctx, enum usbi_log_level level,
+@@ -1540,15 +1550,9 @@ void usbi_log(struct libusb_context *ctx, enum usbi_log_level level,
  	FILE *stream = stdout;
  	const char *prefix;
  
 -#ifndef ENABLE_DEBUG_LOGGING
  	USBI_GET_CONTEXT(ctx);
 -	if (!ctx->debug)
-+	if (ctx->debug == LOG_LEVEL_NONE)
- 		return;
+-		return;
 -	if (level == LOG_LEVEL_WARNING && ctx->debug < 2)
-+	if (level < ctx->debug)
++	if (ctx->debug < 4-level)
  		return;
 -	if (level == LOG_LEVEL_INFO && ctx->debug < 3)
 -		return;
@@ -525,18 +536,10 @@ index 1379eb3..8870e2d 100644
  
  	/* terminate all pending transfers with the LIBUSB_TRANSFER_NO_DEVICE
 diff --git a/libusb/libusbi.h b/libusb/libusbi.h
-index 10a4994..b5ce546 100644
+index 10a4994..c22e695 100644
 --- a/libusb/libusbi.h
 +++ b/libusb/libusbi.h
-@@ -106,6 +106,7 @@ static inline void list_del(struct list_head *entry)
- #define TIMESPEC_IS_SET(ts) ((ts)->tv_sec != 0 || (ts)->tv_nsec != 0)
- 
- enum usbi_log_level {
-+	LOG_LEVEL_NONE,
- 	LOG_LEVEL_DEBUG,
- 	LOG_LEVEL_INFO,
- 	LOG_LEVEL_WARNING,
-@@ -121,12 +122,7 @@ void usbi_log(struct libusb_context *ctx, enum usbi_log_level,
+@@ -121,12 +121,7 @@ void usbi_log(struct libusb_context *ctx, enum usbi_log_level,
  #define _usbi_log(ctx, level, fmt...)
  #endif
  
