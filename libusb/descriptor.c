@@ -158,7 +158,7 @@ static int parse_endpoint(struct libusb_context *ctx,
 				(header.bDescriptorType == LIBUSB_DT_DEVICE))
 			break;
 
-		usbi_dbg("skipping descriptor %x", header.bDescriptorType);
+		usbi_dbg(ctx,"skipping descriptor %x", header.bDescriptorType);
 		buffer += header.bLength;
 		size -= header.bLength;
 		parsed += header.bLength;
@@ -453,7 +453,7 @@ static int parse_configuration(struct libusb_context *ctx,
 					(header.bDescriptorType == LIBUSB_DT_DEVICE))
 				break;
 
-			usbi_dbg("skipping descriptor 0x%x\n", header.bDescriptorType);
+			usbi_dbg(ctx,"skipping descriptor 0x%x\n", header.bDescriptorType);
 			buffer += header.bLength;
 			size -= header.bLength;
 		}
@@ -629,7 +629,7 @@ int API_EXPORTED libusb_get_config_descriptor(libusb_device *dev,
 	int host_endian = 0;
 	int r;
 
-	usbi_dbg("index %d", config_index);
+	usbi_dbg(DEVICE_CTX(dev), "index %d", config_index);
 	if (config_index >= dev->num_configurations)
 		return LIBUSB_ERROR_NOT_FOUND;
 
@@ -667,7 +667,7 @@ int usbi_get_config_index_by_value(struct libusb_device *dev,
 {
 	uint8_t i;
 
-	usbi_dbg("value %d", bConfigurationValue);
+	usbi_dbg(DEVICE_CTX(dev), "value %d", bConfigurationValue);
 	for (i = 0; i < dev->num_configurations; i++) {
 		unsigned char tmp[6];
 		int host_endian;

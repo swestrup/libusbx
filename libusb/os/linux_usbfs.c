@@ -262,7 +262,7 @@ static int check_usb_vfs(const char *dirname)
 	return found;
 }
 
-static const char *find_usbfs_path(void)
+static const char *find_usbfs_path(struct libusb_context *ctx)
 {
 	const char *path = "/dev/bus/usb";
 	const char *ret = NULL;
@@ -303,7 +303,7 @@ static const char *find_usbfs_path(void)
 
 /* the monotonic clock is not usable on all systems (e.g. embedded ones often
  * seem to lack it). fall back to REALTIME if we have to. */
-static clockid_t find_monotonic_clock(void)
+static clockid_t find_monotonic_clock(struct libusb_context *ctx)
 {
 #ifdef CLOCK_MONOTONIC
 	struct timespec ts;
@@ -372,14 +372,14 @@ static int op_init(struct libusb_context *ctx)
 	struct stat statbuf;
 	int r;
 
-	usbfs_path = find_usbfs_path();
+	usbfs_path = find_usbfs_path(ctx);
 	if (!usbfs_path) {
 		usbi_err(ctx, "could not find usbfs");
 		return LIBUSB_ERROR_OTHER;
 	}
 
 	if (monotonic_clkid == -1)
-		monotonic_clkid = find_monotonic_clock();
+		monotonic_clkid = find_monotonic_clock(ctx);
 
 	if (supports_flag_bulk_continuation == -1) {
 		/* bulk continuation URB flag available from Linux 2.6.32 */
@@ -391,7 +391,7 @@ static int op_init(struct libusb_context *ctx)
 	}
 
 	if (supports_flag_bulk_continuation)
-		usbi_dbg("bulk continuation flag supported");
+		usbi_dbg(ctx, "bulk continuation flag supported");
 
 	if (-1 == supports_flag_zero_packet) {
 		/* zero length packet URB flag fixed since Linux 2.6.31 */
@@ -1061,7 +1061,7 @@ int linux_enumerate_device(struct libusb_context *ctx,
 	 * will be reused. instead we should add a simple sysfs attribute with
 	 * a session ID. */
 	session_id = busnum << 8 | devaddr;
-	usbi_dbg("busnum %d devaddr %d session_id %ld", busnum, devaddr,
+	usbi_dbg(ctx, "busnum %d devaddr %d session_id %ld", busnum, devaddr,
 		session_id);
 
 	if (usbi_get_device_by_session_id(ctx, session_id)) {
@@ -1134,7 +1134,7 @@ static int usbfs_scan_busdir(struct libusb_context *ctx, uint8_t busnum)
 	int r = LIBUSB_ERROR_IO;
 
 	snprintf(dirpath, PATH_MAX, "%s/%03d", usbfs_path, busnum);
-	usbi_dbg("%s", dirpath);
+	usbi_dbg(ctx, "%s", dirpath);
 	dir = opendir(dirpath);
 	if (!dir) {
 		usbi_err(ctx, "opendir '%s' failed, errno=%d", dirpath, errno);
@@ -1151,7 +1151,7 @@ static int usbfs_scan_busdir(struct libusb_context *ctx, uint8_t busnum)
 
 		devaddr = atoi(entry->d_name);
 		if (devaddr == 0) {
-			usbi_dbg("unknown dir entry %s", entry->d_name);
+			usbi_dbg(ctx, "unknown dir entry %s", entry->d_name);
 			continue;
 		}
 
@@ -1764,7 +1764,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 		last_urb_partial = 1;
 		num_urbs++;
 	}
-	usbi_dbg("need %d urbs for new transfer with length %d", num_urbs,
+	usbi_dbg(TRANSFER_CTX(transfer), "need %d urbs for new transfer with length %d", num_urbs,
 		transfer->length);
 	alloc_size = num_urbs * sizeof(struct usbfs_urb);
 	urbs = calloc(1, alloc_size);
@@ -1813,7 +1813,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 			/* if the first URB submission fails, we can simply free up and
 			 * return failure immediately. */
 			if (i == 0) {
-				usbi_dbg("first URB failed, easy peasy");
+				usbi_dbg(TRANSFER_CTX(transfer), "first URB failed, easy peasy");
 				free(urbs);
 				tpriv->urbs = NULL;
 				return r;
@@ -1847,7 +1847,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer,
 
 			discard_urbs(itransfer, 0, i);
 
-			usbi_dbg("reporting successful submission but waiting for %d "
+			usbi_dbg(TRANSFER_CTX(transfer), "reporting successful submission but waiting for %d "
 				"discards before reporting error", i);
 			return 0;
 		}
@@ -1899,7 +1899,7 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer)
 			this_urb_len += packet_len;
 		}
 	}
-	usbi_dbg("need %d 32k URBs for transfer", num_urbs);
+	usbi_dbg(TRANSFER_CTX(transfer), "need %d 32k URBs for transfer", num_urbs);
 
 	alloc_size = num_urbs * sizeof(*urbs);
 	urbs = calloc(1, alloc_size);
@@ -1976,7 +1976,7 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer)
 			/* if the first URB submission fails, we can simply free up and
 			 * return failure immediately. */
 			if (i == 0) {
-				usbi_dbg("first URB failed, easy peasy");
+				usbi_dbg(TRANSFER_CTX(transfer), "first URB failed, easy peasy");
 				free_iso_urbs(tpriv);
 				return r;
 			}
@@ -2001,7 +2001,7 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer)
 			tpriv->num_retired = num_urbs - i;
 			discard_urbs(itransfer, 0, i);
 
-			usbi_dbg("reporting successful submission but waiting for %d "
+			usbi_dbg(TRANSFER_CTX(transfer), "reporting successful submission but waiting for %d "
 				"discards before reporting error", i);
 			return 0;
 		}
@@ -2146,7 +2146,7 @@ static int handle_bulk_completion(struct usbi_transfer *itransfer,
 
 	if (tpriv->reap_action != NORMAL) {
 		/* cancelled, submit_fail, or completed early */
-		usbi_dbg("abnormal reap: urb status %d", urb->status);
+		usbi_dbg(ITRANSFER_CTX(itransfer), "abnormal reap: urb status %d", urb->status);
 
 		/* even though we're in the process of cancelling, it's possible that
 		 * we may receive some data in these URBs that we don't want to lose.
@@ -2166,9 +2166,9 @@ static int handle_bulk_completion(struct usbi_transfer *itransfer,
 		 */
 		if (urb->actual_length > 0) {
 			unsigned char *target = transfer->buffer + itransfer->transferred;
-			usbi_dbg("received %d bytes of surplus data", urb->actual_length);
+			usbi_dbg(TRANSFER_CTX(transfer), "received %d bytes of surplus data", urb->actual_length);
 			if (urb->buffer != target) {
-				usbi_dbg("moving surplus data from offset %d to offset %d",
+				usbi_dbg(TRANSFER_CTX(transfer), "moving surplus data from offset %d to offset %d",
 					(unsigned char *) urb->buffer - transfer->buffer,
 					target - transfer->buffer);
 				memmove(target, urb->buffer, urb->actual_length);
@@ -2291,7 +2291,7 @@ static int handle_iso_completion(struct usbi_transfer *itransfer,
 		return LIBUSB_ERROR_NOT_FOUND;
 	}
 
-	usbi_dbg("handling completion status %d of iso urb %d/%d", urb->status,
+	usbi_dbg(TRANSFER_CTX(transfer), "handling completion status %d of iso urb %d/%d", urb->status,
 		urb_idx, num_urbs);
 
 	/* copy isochronous results back in */
@@ -2341,10 +2341,10 @@ static int handle_iso_completion(struct usbi_transfer *itransfer,
 	tpriv->num_retired++;
 
 	if (tpriv->reap_action != NORMAL) { /* cancelled or submit_fail */
-		usbi_dbg("CANCEL: urb status %d", urb->status);
+		usbi_dbg(TRANSFER_CTX(transfer), "CANCEL: urb status %d", urb->status);
 
 		if (tpriv->num_retired == num_urbs) {
-			usbi_dbg("CANCEL: last URB handled, reporting");
+			usbi_dbg(TRANSFER_CTX(transfer), "CANCEL: last URB handled, reporting");
 			free_iso_urbs(tpriv);
 			if (tpriv->reap_action == CANCELLED) {
 				usbi_mutex_unlock(&itransfer->lock);
@@ -2377,7 +2377,7 @@ static int handle_iso_completion(struct usbi_transfer *itransfer,
 
 	/* if we're the last urb then we're done */
 	if (urb_idx == num_urbs) {
-		usbi_dbg("last URB in transfer --> complete!");
+		usbi_dbg(TRANSFER_CTX(transfer), "last URB in transfer --> complete!");
 		free_iso_urbs(tpriv);
 		usbi_mutex_unlock(&itransfer->lock);
 		return usbi_handle_transfer_completion(itransfer, status);
@@ -2422,7 +2422,7 @@ static int handle_control_completion(struct usbi_transfer *itransfer,
 		status = LIBUSB_TRANSFER_NO_DEVICE;
 		break;
 	case -EPIPE:
-		usbi_dbg("unsupported control request");
+		usbi_dbg(ITRANSFER_CTX(itransfer), "unsupported control request");
 		status = LIBUSB_TRANSFER_STALL;
 		break;
 	case -EOVERFLOW:
@@ -2473,7 +2473,7 @@ static int reap_for_handle(struct libusb_device_handle *handle)
 	itransfer = urb->usercontext;
 	transfer = USBI_TRANSFER_TO_LIBUSB_TRANSFER(itransfer);
 
-	usbi_dbg("urb type=%d status=%d transferred=%d", urb->type, urb->status,
+	usbi_dbg(TRANSFER_CTX(transfer), "urb type=%d status=%d transferred=%d", urb->type, urb->status,
 		urb->actual_length);
 
 	switch (transfer->type) {

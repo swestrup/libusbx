@@ -482,7 +482,7 @@ struct discovered_devs *discovered_devs_append(
 	}
 
 	/* exceeded capacity, need to grow */
-	usbi_dbg("need to increase capacity");
+	usbi_dbg(DEVICE_CTX(dev),"need to increase capacity");
 	capacity = discdevs->capacity + DISCOVERED_DEVICES_SIZE_STEP;
 	discdevs = usbi_reallocf(discdevs,
 		sizeof(*discdevs) + (sizeof(void *) * capacity));
@@ -660,7 +660,7 @@ ssize_t API_EXPORTED libusb_get_device_list(libusb_context *ctx,
 	int r = 0;
 	ssize_t i, len;
 	USBI_GET_CONTEXT(ctx);
-	usbi_dbg("");
+	usbi_dbg(ctx,"");
 
 	if (!discdevs)
 		return LIBUSB_ERROR_NO_MEM;
@@ -999,7 +999,7 @@ void API_EXPORTED libusb_unref_device(libusb_device *dev)
 	usbi_mutex_unlock(&dev->lock);
 
 	if (refcnt == 0) {
-		usbi_dbg("destroy device %d.%d", dev->bus_number, dev->device_address);
+		usbi_dbg(DEVICE_CTX(dev), "destroy device %d.%d", dev->bus_number, dev->device_address);
 
 		libusb_unref_device(dev->parent_dev);
 
@@ -1086,7 +1086,7 @@ int API_EXPORTED libusb_open(libusb_device *dev,
 	struct libusb_device_handle *_handle;
 	size_t priv_size = usbi_backend->device_handle_priv_size;
 	int r;
-	usbi_dbg("open %d.%d", dev->bus_number, dev->device_address);
+	usbi_dbg(DEVICE_CTX(dev), "open %d.%d", dev->bus_number, dev->device_address);
 
 	if (!dev->attached) {
 		return LIBUSB_ERROR_NO_DEVICE;
@@ -1261,9 +1261,8 @@ void API_EXPORTED libusb_close(libusb_device_handle *dev_handle)
 
 	if (!dev_handle)
 		return;
-	usbi_dbg("");
-
 	ctx = HANDLE_CTX(dev_handle);
+	usbi_dbg(ctx,"");
 
 	/* Similarly to libusb_open(), we want to interrupt all event handlers
 	 * at this point. More importantly, we want to perform the actual close of
@@ -1345,13 +1344,13 @@ int API_EXPORTED libusb_get_configuration(libusb_device_handle *dev,
 {
 	int r = LIBUSB_ERROR_NOT_SUPPORTED;
 
-	usbi_dbg("");
+	usbi_dbg(HANDLE_CTX(dev), "");
 	if (usbi_backend->get_configuration)
 		r = usbi_backend->get_configuration(dev, config);
 
 	if (r == LIBUSB_ERROR_NOT_SUPPORTED) {
 		uint8_t tmp = 0;
-		usbi_dbg("falling back to control message");
+		usbi_dbg(HANDLE_CTX(dev), "falling back to control message");
 		r = libusb_control_transfer(dev, LIBUSB_ENDPOINT_IN,
 			LIBUSB_REQUEST_GET_CONFIGURATION, 0, 0, &tmp, 1, 1000);
 		if (r == 0) {
@@ -1361,12 +1360,12 @@ int API_EXPORTED libusb_get_configuration(libusb_device_handle *dev,
 			r = 0;
 			*config = tmp;
 		} else {
-			usbi_dbg("control failed, error %d", r);
+			usbi_dbg(HANDLE_CTX(dev), "control failed, error %d", r);
 		}
 	}
 
 	if (r == 0)
-		usbi_dbg("active config %d", *config);
+		usbi_dbg(HANDLE_CTX(dev), "active config %d", *config);
 
 	return r;
 }
@@ -1420,7 +1419,7 @@ int API_EXPORTED libusb_get_configuration(libusb_device_handle *dev,
 int API_EXPORTED libusb_set_configuration(libusb_device_handle *dev,
 	int configuration)
 {
-	usbi_dbg("configuration %d", configuration);
+	usbi_dbg(HANDLE_CTX(dev), "configuration %d", configuration);
 	return usbi_backend->set_configuration(dev, configuration);
 }
 
@@ -1544,7 +1543,7 @@ out:
 int API_EXPORTED libusb_set_interface_alt_setting(libusb_device_handle *dev,
 	int interface_number, int alternate_setting)
 {
-	usbi_dbg("interface %d altsetting %d",
+	usbi_dbg(HANDLE_CTX(dev), "interface %d altsetting %d",
 		interface_number, alternate_setting);
 	if (interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
@@ -1827,10 +1826,18 @@ int API_EXPORTED libusb_init(libusb_context **context)
 	ctx->debug = LIBUSB_LOG_LEVEL_DEBUG;
 #endif
 
+#ifdef ENABLE_DEBUG_LOGGING
+	ctx->debug = LOG_LEVEL_DEBUG;
+	ctx->debug_fixed = 1;
+	usbi_dbg(ctx,"Logging active due to --enable-debug-log")
+#else
 	if (dbg) {
 		ctx->debug = atoi(dbg);
-		if (ctx->debug)
+		if (ctx->debug) {
 			ctx->debug_fixed = 1;
+			usbi_dbg(ctx,"Logging active due to LIBUSB_DEBUG");
+			ctx->debug_fixed = 1;
+		}
 	}
 
 	/* default context should be initialized before calling usbi_dbg */
