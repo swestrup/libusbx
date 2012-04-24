@@ -224,14 +224,15 @@ static struct linux_device_handle_priv *_device_handle_priv(
 
 /* check dirent for a /dev/usbdev%d.%d name
  * optionally return bus/device on success */
-static int _is_usbdev_entry(struct dirent *entry, int *bus_p, int *dev_p)
+static int _is_usbdev_entry(struct libusb_context *ctx,
+	struct dirent *entry, int *bus_p, int *dev_p)
 {
 	int busnum, devnum;
 
 	if (sscanf(entry->d_name, "usbdev%d.%d", &busnum, &devnum) != 2)
 		return 0;
 
-	usbi_dbg("found: %s", entry->d_name);
+	usbi_dbg(ctx, "found: %s", entry->d_name);
 	if (bus_p != NULL)
 		*bus_p = busnum;
 	if (dev_p != NULL)
@@ -284,7 +285,7 @@ static const char *find_usbfs_path(struct libusb_context *ctx)
 		dir = opendir(path);
 		if (dir != NULL) {
 			while ((entry = readdir(dir)) != NULL) {
-				if (_is_usbdev_entry(entry, NULL, NULL)) {
+				if (_is_usbdev_entry(ctx, entry, NULL, NULL)) {
 					/* found one; that's enough */
 					ret = path;
 					usbdev_names = 1;
@@ -403,7 +404,7 @@ static int op_init(struct libusb_context *ctx)
 	}
 
 	if (supports_flag_zero_packet)
-		usbi_dbg("zero length packet flag supported");
+		usbi_dbg(ctx, "zero length packet flag supported");
 
 	if (-1 == sysfs_has_descriptors) {
 		/* sysfs descriptors has all descriptors since Linux 2.6.26 */
@@ -592,11 +593,11 @@ static int sysfs_get_active_config(struct libusb_device *dev, int *config)
 	r = read(fd, tmp, sizeof(tmp));
 	close(fd);
 	if (r < 0) {
-		usbi_err(DEVICE_CTX(dev), 
+		usbi_err(DEVICE_CTX(dev),
 			"read bConfigurationValue failed ret=%d errno=%d", r, errno);
 		return LIBUSB_ERROR_IO;
 	} else if (r == 0) {
-		usbi_dbg("device unconfigured");
+		usbi_dbg(DEVICE_CTX(dev), "device unconfigured");
 		*config = -1;
 		return 0;
 	}
@@ -1186,7 +1187,7 @@ static int usbfs_get_device_list(struct libusb_context *ctx)
 
 		if (usbdev_names) {
 			int devaddr;
-			if (!_is_usbdev_entry(entry, &busnum, &devaddr))
+			if (!_is_usbdev_entry(ctx, entry, &busnum, &devaddr))
 				continue;
 
 			r = linux_enumerate_device(ctx, busnum, (uint8_t) devaddr, NULL);
@@ -1661,11 +1662,13 @@ static int discard_urbs(struct usbi_transfer *itransfer, int first, int last_plu
 			continue;
 
 		if (EINVAL == errno) {
-			usbi_dbg("URB not found --> assuming ready to be reaped");
+			usbi_dbg(TRANSFER_CTX(transfer),
+				"URB not found --> assuming ready to be reaped");
 			if (i == (last_plus_one - 1))
 				ret = LIBUSB_ERROR_NOT_FOUND;
 		} else if (ENODEV == errno) {
-			usbi_dbg("Device not found for URB --> assuming ready to be reaped");
+			usbi_dbg(TRANSFER_CTX(transfer),
+				"Device not found for URB --> assuming ready to be reaped");
 			ret = LIBUSB_ERROR_NO_DEVICE;
 		} else {
 			usbi_warn(TRANSFER_CTX(transfer),
@@ -2201,7 +2204,7 @@ static int handle_bulk_completion(struct usbi_transfer *itransfer,
 		break;
 	case -ENODEV:
 	case -ESHUTDOWN:
-		usbi_dbg("device removed");
+		usbi_dbg(ITRANSFER_CTX(itransfer), "device removed");
 		tpriv->reap_status = LIBUSB_TRANSFER_NO_DEVICE;
 		goto cancel_remaining;
 	case -EPIPE:
@@ -2309,15 +2312,15 @@ static int handle_iso_completion(struct usbi_transfer *itransfer,
 			break;
 		case -ENODEV:
 		case -ESHUTDOWN:
-			usbi_dbg("device removed");
+			usbi_dbg(TRANSFER_CTX(transfer), "device removed");
 			lib_desc->status = LIBUSB_TRANSFER_NO_DEVICE;
 			break;
 		case -EPIPE:
-			usbi_dbg("detected endpoint stall");
+			usbi_dbg(TRANSFER_CTX(transfer), "detected endpoint stall");
 			lib_desc->status = LIBUSB_TRANSFER_STALL;
 			break;
 		case -EOVERFLOW:
-			usbi_dbg("overflow error");
+			usbi_dbg(TRANSFER_CTX(transfer), "overflow error");
 			lib_desc->status = LIBUSB_TRANSFER_OVERFLOW;
 			break;
 		case -ETIME:
@@ -2326,7 +2329,7 @@ static int handle_iso_completion(struct usbi_transfer *itransfer,
 		case -ECOMM:
 		case -ENOSR:
 		case -EXDEV:
-			usbi_dbg("low-level USB error %d", urb_desc->status);
+			usbi_dbg(TRANSFER_CTX(transfer), "low-level USB error %d", urb_desc->status);
 			lib_desc->status = LIBUSB_TRANSFER_ERROR;
 			break;
 		default:
@@ -2369,7 +2372,7 @@ static int handle_iso_completion(struct usbi_transfer *itransfer,
 		status = LIBUSB_TRANSFER_NO_DEVICE;
 		break;
 	default:
-		usbi_warn(TRANSFER_CTX(transfer),
+		usbi_warn(ITRANSFER_CTX(itransfer),
 			"unrecognised urb status %d", urb->status);
 		status = LIBUSB_TRANSFER_ERROR;
 		break;
@@ -2418,7 +2421,7 @@ static int handle_control_completion(struct usbi_transfer *itransfer,
 		break;
 	case -ENODEV:
 	case -ESHUTDOWN:
-		usbi_dbg("device removed");
+		usbi_dbg(ITRANSFER_CTX(itransfer), "device removed");
 		status = LIBUSB_TRANSFER_NO_DEVICE;
 		break;
 	case -EPIPE:
@@ -2426,7 +2429,7 @@ static int handle_control_completion(struct usbi_transfer *itransfer,
 		status = LIBUSB_TRANSFER_STALL;
 		break;
 	case -EOVERFLOW:
-		usbi_dbg("control overflow error");
+		usbi_dbg(ITRANSFER_CTX(itransfer), "control overflow error");
 		status = LIBUSB_TRANSFER_OVERFLOW;
 		break;
 	case -ETIME:

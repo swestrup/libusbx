@@ -1109,7 +1109,7 @@ int API_EXPORTED libusb_open(libusb_device *dev,
 
 	r = usbi_backend->open(_handle);
 	if (r < 0) {
-		usbi_dbg("open %d.%d returns %d", dev->bus_number, dev->device_address, r);
+		usbi_dbg(DEVICE_CTX(dev), "open %d.%d returns %d", dev->bus_number, dev->device_address, r);
 		libusb_unref_device(dev);
 		usbi_mutex_destroy(&_handle->lock);
 		free(_handle);
@@ -1225,7 +1225,7 @@ static void do_close(struct libusb_context *ctx,
 		 * just making sure that we don't attempt to process the transfer after
 		 * the device handle is invalid
 		 */
-		usbi_dbg("Removed transfer %p from the in-flight list because device handle %p closed",
+		usbi_dbg(ctx, "Removed transfer %p from the in-flight list because device handle %p closed",
 			 transfer, dev_handle);
 	}
 	usbi_mutex_unlock(&ctx->flying_transfers_lock);
@@ -1831,6 +1831,7 @@ int API_EXPORTED libusb_init(libusb_context **context)
 	ctx->debug_fixed = 1;
 	usbi_dbg(ctx,"Logging active due to --enable-debug-log")
 #else
+	char *dbg = getenv("LIBUSB_DEBUG");
 	if (dbg) {
 		ctx->debug = atoi(dbg);
 		if (ctx->debug) {
