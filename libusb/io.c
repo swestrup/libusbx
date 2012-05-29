@@ -1112,7 +1112,7 @@ int usbi_io_init(struct libusb_context *ctx)
 	usbi_mutex_init(&ctx->pollfds_lock, NULL);
 	usbi_mutex_init(&ctx->pollfd_modify_lock, NULL);
 	usbi_mutex_init_recursive(&ctx->events_lock, NULL);
-	usbi_dbg("events_lock initialized as recursive.");
+	usbi_dbg(ctx,"events_lock initialized as recursive.");
 	usbi_mutex_init(&ctx->event_waiters_lock, NULL);
 	usbi_cond_init(&ctx->event_waiters_cond, NULL);
 	list_init(&ctx->flying_transfers);
@@ -1170,7 +1170,7 @@ err:
 	usbi_mutex_destroy(&ctx->pollfds_lock);
 	usbi_mutex_destroy(&ctx->pollfd_modify_lock);
 	usbi_mutex_destroy(&ctx->events_lock);
-	usbi_dbg("events_lock destroyed.");
+	usbi_dbg(ctx,"events_lock destroyed.");
 	usbi_mutex_destroy(&ctx->event_waiters_lock);
 	usbi_cond_destroy(&ctx->event_waiters_cond);
 	return r;
@@ -1195,9 +1195,9 @@ void usbi_io_exit(struct libusb_context *ctx)
 	usbi_mutex_destroy(&ctx->pollfd_modify_lock);
 	int r = usbi_mutex_destroy(&ctx->events_lock);
 	if( r == 0 )
-	  usbi_dbg("events_lock successfully destroyed.");
+	  usbi_dbg(ctx,"events_lock successfully destroyed.");
 	else
-	  usbi_err("events_lock destroyed when busy.");
+	  usbi_err(ctx,"events_lock destroyed when busy.");
 	usbi_mutex_destroy(&ctx->event_waiters_lock);
 	usbi_cond_destroy(&ctx->event_waiters_cond);
 }
@@ -1632,7 +1632,7 @@ int API_EXPORTED libusb_try_lock_events(libusb_context *ctx)
 	if (r)
 		return 1;
 	else
-		usbi_dbg("trylock of events_lock failed.");
+		usbi_dbg(ctx,"trylock of events_lock failed.");
 
 	ctx->event_handler_active = 1;
 	return 0;
