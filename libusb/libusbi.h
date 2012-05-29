@@ -89,14 +89,14 @@ struct list_head {
  *  type - the type of the first parameter
  */
 #define list_for_each_entry(pos, head, member, type)			\
-	for (pos = list_entry((head)->next, type, member);			\
-		 &pos->member != (head);								\
+	for (pos = list_entry((head)->next, type, member);		\
+		 &pos->member != (head);				\
 		 pos = list_entry(pos->member.next, type, member))
 
-#define list_for_each_entry_safe(pos, n, head, member, type)	\
-	for (pos = list_entry((head)->next, type, member),			\
-		 n = list_entry(pos->member.next, type, member);		\
-		 &pos->member != (head);								\
+#define list_for_each_entry_safe(pos, n, head, member, type)		\
+	for (pos = list_entry((head)->next, type, member),		\
+		 n = list_entry(pos->member.next, type, member);	\
+		 &pos->member != (head);				\
 		 pos = n, n = list_entry(n->member.next, type, member))
 
 #define list_empty(entry) ((entry)->next == (entry))
@@ -140,9 +140,9 @@ static inline void *usbi_reallocf(void *ptr, size_t size)
 	return ret;
 }
 
-#define container_of(ptr, type, member) ({                      \
-        const typeof( ((type *)0)->member ) *mptr = (ptr);    \
-        (type *)( (char *)mptr - offsetof(type,member) );})
+#define container_of(ptr, type, member) ({			\
+      const typeof( ((type *)0)->member ) *mptr = (ptr);	\
+      (type *)( (char *)mptr - offsetof(type,member) );})
 
 #define MIN(a, b)	((a) < (b) ? (a) : (b))
 #define MAX(a, b)	((a) > (b) ? (a) : (b))
