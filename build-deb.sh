@@ -1,13 +1,15 @@
 #!/bin/bash
 
-debuild -us -uc -I.git
+dpkg-checkbuilddeps || exit 1
+
+debuild -us -uc
 
 RETVAL=$?
 if [ $RETVAL -ne 0 ]; then
     echo "-----------------------------"
     echo "Oh no!, $0 failed!"
     echo "-----------------------------"
-    if [ $RETVAL -eq 29 ]; then
+    if git status | grep "working directory clean" -q; then
         echo "You appear to have uncommitted files in your git tree."
         echo "$0 only can run when 'git status' reports a clean source tree."
         echo ""
