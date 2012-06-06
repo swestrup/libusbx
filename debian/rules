@@ -120,7 +120,6 @@ clean:
 	dh_testdir
 	dh_testroot
 	rm -f *-stamp
-	rm -f config.sub config.guess
 
 	# Remove build trees
 	rm -rf $(objdir) $(objdir_udeb)
