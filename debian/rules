@@ -50,7 +50,10 @@ configure-common-stamp:
 	# update config.guess and config.sub
 	cp -f /usr/share/misc/config.sub config.sub
 	cp -f /usr/share/misc/config.guess config.guess
-	
+
+	libtoolize --copy --force
+	autoreconf --install --force
+
 	touch $@
 
 configure-deb: configure-deb-stamp
