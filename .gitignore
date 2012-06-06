@@ -4,6 +4,7 @@ Makefile
 Makefile.in
 *.la
 *.lo
+*.ncb
 *.o
 libtool
 ltmain.sh
