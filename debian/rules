@@ -147,7 +147,7 @@ install: build
 	mv $(CURDIR)/debian/tmp/usr/lib/libusb-1.0.so.* \
 	   $(CURDIR)/debian/tmp/lib/
 	ln -sf /lib/libusb-1.0.so.0 $(CURDIR)/debian/tmp/usr/lib/libusb-1.0.so.0 
-	ln -sf /lib/libusb-1.0.so.0.0.0 $(CURDIR)/debian/tmp/usr/lib/libusb-1.0.so
+	ln -sf /lib/libusb-1.0.so.0.1.0 $(CURDIR)/debian/tmp/usr/lib/libusb-1.0.so
 
 	# Move all files in their corresponding package
 	dh_install -s -Nlibusb-1.0-udeb --list-missing --sourcedir=debian/tmp
