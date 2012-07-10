@@ -1541,7 +1541,7 @@ int usbi_handle_transfer_completion(struct usbi_transfer *itransfer,
 
 	usbi_mutex_lock(&ctx->flying_transfers_lock);
 	list_del(&itransfer->list);
-	if (usbi_using_timerfd(ctx))
+	if (usbi_using_timerfd(ctx)) {
 		r = arm_timerfd_for_next_timeout(ctx);
 	usbi_mutex_unlock(&ctx->flying_transfers_lock);
 	if (usbi_using_timerfd(ctx) && (r < 0))
