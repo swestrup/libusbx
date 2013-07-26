@@ -50,6 +50,10 @@ typedef unsigned __int32  uint32_t;
 #include <stdint.h>
 #endif
 
+// no trailing _t as that is a Posix reserved naming convention.
+typedef unsigned int  uint;
+typedef unsigned long ulong;
+
 #if !defined(_WIN32_WCE)
 #include <sys/types.h>
 #endif
@@ -1281,13 +1285,13 @@ enum libusb_capability {
 
 /** \ingroup lib
  *  Log message levels.
- *  - LIBUSB_LOG_LEVEL_NONE (0)    : no messages ever printed by the library (default)
- *  - LIBUSB_LOG_LEVEL_ERROR (1)   : error messages are printed to stderr
- *  - LIBUSB_LOG_LEVEL_WARNING (2) : warning and error messages are printed to stderr
- *  - LIBUSB_LOG_LEVEL_INFO (3)    : informational messages are printed to stdout, warning
- *    and error messages are printed to stderr
- *  - LIBUSB_LOG_LEVEL_DEBUG (4)   : debug and informational messages are printed to stdout,
- *    warnings and errors to stderr
+ *  - LIBUSB_LOG_LEVEL_NONE    (0) : no messages are ever logged
+ *  - LIBUSB_LOG_LEVEL_ERROR   (1) : error messages are logged
+ *  - LIBUSB_LOG_LEVEL_WARNING (2) : warning, and error messages are logged
+ *  - LIBUSB_LOG_LEVEL_INFO    (3) : informational, warning, and error messages
+ *                                   are logged
+ *  - LIBUSB_LOG_LEVEL_DEBUG   (4) : debug, informational, warning, and error
+ *				     messages are logged.
  */
 enum libusb_log_level {
 	LIBUSB_LOG_LEVEL_NONE = 0,
@@ -1297,7 +1301,14 @@ enum libusb_log_level {
 	LIBUSB_LOG_LEVEL_DEBUG,
 };
 
-int LIBUSB_CALL libusb_init(libusb_context **ctx, libusb_logger *, void *);
+libusb_context * LIBUSB_CALL libusb_context_create(libusb_allocator *alloc);
+void LIBUSB_CALL libusb_context_dispose(libusb_context *ctx);
+void LIBUSB_CALL libusb_context_set_allocator(libusb_context *ctx,
+	libusb_allocator *alloc);
+void LIBUSB_CALL libusb_context_set_logger(libusb_context *ctx,
+	libusb_logger *logger);
+
+int LIBUSB_CALL  libusb_init(libusb_context **ctx);
 void LIBUSB_CALL libusb_exit(libusb_context *ctx);
 void LIBUSB_CALL libusb_set_debug(libusb_context *ctx, int level);
 const struct libusb_version * LIBUSB_CALL libusb_get_version(void);
