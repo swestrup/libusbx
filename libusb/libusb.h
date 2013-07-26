@@ -1297,7 +1297,7 @@ enum libusb_log_level {
 	LIBUSB_LOG_LEVEL_DEBUG,
 };
 
-int LIBUSB_CALL libusb_init(libusb_context **ctx);
+int LIBUSB_CALL libusb_init(libusb_context **ctx, libusb_logger *, void *);
 void LIBUSB_CALL libusb_exit(libusb_context *ctx);
 void LIBUSB_CALL libusb_set_debug(libusb_context *ctx, int level);
 const struct libusb_version * LIBUSB_CALL libusb_get_version(void);

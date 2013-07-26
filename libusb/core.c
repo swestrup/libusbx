@@ -1782,6 +1782,93 @@ void API_EXPORTED libusb_set_debug(libusb_context *ctx, int level)
 		ctx->debug = level;
 }
 
+/* By default libusb uses a simple message logger that prints informational
+ * messages to stdout and debug, warning and error messages to stderr.
+ *
+ * this function can be used to set the logger for a particular libusb context
+ * to one of the user's choosing.
+ *
+ * \param ctx the context to operate on, or NULL for the default context
+ * \param logger the logging function to register for this context
+ * \param log_data arbitrary context data to pass to the logging function.
+ */
+void API_EXPORTED libusb_set_logger(libusb_context *ctx,
+	libusb_logger *logger, void *log_data)
+{
+	USBI_GET_CONTEXT(ctx);
+	ctx->logger = logger;
+}
+
+void usbi_default_logger(libusb_context *ctx, void *logdata,
+	double stamp, int level, char const *prefix, char const * function,
+	char const * format, va_list args)
+{
+	FILE *stream = (level == LOG_LEVEL_INFO) ? stdout : stderr;
+
+	fprintf(stream, "libusb: %12.6f %s [%s] ", stamp, prefix, function);
+
+	vfprintf(stream, format, args);
+
+	fprintf(stream, "\n");
+}
+
+void usbi_log_v(struct libusb_context *ctx, enum usbi_log_level level,
+	const char *function, const char *format, va_list args)
+{
+	const char *prefix;
+	struct timeval now;
+	static struct timeval first = { 0, 0 };
+
+	USBI_GET_CONTEXT(ctx);
+	if (ctx->debug < 4-level)
+		return;
+
+	usbi_gettimeofday(&now, NULL);
+	if (!first.tv_sec) {
+		first.tv_sec = now.tv_sec;
+		first.tv_usec = now.tv_usec;
+	}
+	if (now.tv_usec < first.tv_usec) {
+		now.tv_sec--;
+		now.tv_usec += 1000000;
+	}
+	now.tv_sec -= first.tv_sec;
+	now.tv_usec -= first.tv_usec;
+
+	double stamp = (double)now.tv_sec + (((double)now.tv_usec)/1000000.0);
+
+	switch (level) {
+	case LOG_LEVEL_INFO:
+		prefix = "info";
+		break;
+	case LOG_LEVEL_WARNING:
+		prefix = "warning";
+		break;
+	case LOG_LEVEL_ERROR:
+		prefix = "error";
+		break;
+	case LOG_LEVEL_DEBUG:
+		prefix = "debug";
+		break;
+	default:
+		prefix = "unknown";
+		break;
+	}
+
+	ctx->logger(ctx, ctx->logdata, stamp, level, prefix, function,
+		format, args);
+}
+
+void usbi_log(struct libusb_context *ctx, enum usbi_log_level level,
+	const char *function, const char *format, ...)
+{
+	va_list args;
+
+	va_start (args, format);
+	usbi_log_v(ctx, level, function, format, args);
+	va_end (args);
+}
+
 /** \ingroup lib
  * Initialize libusb. This function must be called before calling any other
  * libusbx function.
@@ -1792,10 +1879,17 @@ void API_EXPORTED libusb_set_debug(libusb_context *ctx, int level)
  *
  * \param context Optional output location for context pointer.
  * Only valid on return code 0.
+ * \param logger Optional policy object for specifying alternative facilies
+ * for logging and/or memory allocation, or NULL for default facilities.
  * \returns 0 on success, or a LIBUSB_ERROR code on failure
  * \see contexts
+ *
+ * NOTE: The logger and logdata parameters should be replaced with a single
+ * libusb_policy object pointer that encapsulates logging and memory
+ * allocation facilities, with NULL defaulting the policies.
  */
-int API_EXPORTED libusb_init(libusb_context **context)
+int API_EXPORTED libusb_init(libusb_context **context, libusb_logger *logger,
+  void *logdata)
 {
 	struct libusb_device *dev, *next;
 	char *dbg = getenv("LIBUSB_DEBUG");
