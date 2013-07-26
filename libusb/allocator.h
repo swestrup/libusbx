@@ -24,8 +24,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-// #include "macros.h"
-
 // Define abstract allocator, for those who want to replace libusb's
 // memory allocator with their own
 
@@ -98,7 +96,9 @@ libusb_allocator;
 
 // These functions make calls through an Allocator to implement the current
 // memory allocation policy. They are intended to be called through macros
-// that capture the current source line, function, and filename
+// that capture the current source line, function, and filename, and possibly
+// the type of the object being allocated. The macros are defined at the
+// bottom of this file.
 
 void *allocator_alloc
   ( libusb_allocator * allocator
@@ -170,187 +170,141 @@ GCC_PRINTF(7,0);
 
 int allocator_asprintf
   ( libusb_allocator * allocator
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char **       bufp
-  , const char *  format
+  , char const	     *  name
+  , char const	     *  file
+  , char const	     *  func
+  , long		line
+  , char	     ** bufp
+  , const char	     *  format
   , ...
   )
 GCC_PRINTF(7,8);
 
 char *allocator_strdup
   ( libusb_allocator * allocator
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char const *  str
+  , char const	     * name
+  , char const	     * file
+  , char const	     * func
+  , long	       line
+  , char const	     * str
   );
 
 
-// Note: This logging policy should actually have an embedded concept of
-// output logging streams, and ways to attach/detach and enable/disable
-// streams based on predicate callbacks so that, for instance, the stdout
-// stream responds to minor messages only, the stderr stream responds to major
-// messages, and the file stream takes everything. Thus, it seems we need an
-// output logging stream abstraction consisting of: an output stream, a local
-// logging level, local logging flags, local output data, and a predicate
-// callback that takes the local level and flags and the message'sss level and
-// flags, and returns a boolean indicating if that stream should output the
-// message or not. However this is way overkill for what we are doing right
-// now.
+extern libusb_allocator const libusb_default_allocator;
 
-typedef enum
-  { LOGLEVEL_ERROR
-  , LOGLEVEL_WARNING
-  , LOGLEVEL_INFO
-  , LOGLEVEL_NOTICE
-  , LOGLEVEL_DEBUG
-  , LOGLEVEL_TRACE
-  , LOGLEVEL_
-  }
-LogLevel;
+// Allocate an object by type.
+#define usbi_alloc(ctx,typ)			\
+  (typ *) allocator_alloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , #typ					\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , sizeof(typ)				\
+    )
 
-typedef uint32_t LogFlags;
-#define LOGFLAGS_ALL UINT32_MAX
+// Allocate some raw memory, by size		\
+#define usbi_allocz(ctx,siz)			\
+  (void *) allocpolicy_alloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , "uint_8[" #siz "]"			\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , siz					\
+    )
 
-typedef void LogBegProc
-  ( void *       data
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
+// Allocate an array of objects, by type and count.
+#define usbi_calloc(ctx,num,typ)		\
+  (typ *) allocator_calloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , #typ "[" #num "]"				\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , (ulong)(num)				\
+    , sizeof(typ)				\
+    )
 
-typedef void LogLogProc
-  ( void *       data
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , va_list      args
-  )
-GCC_PRINTF(7,0);
+// Allocate an array of memory chunks, by size and count
+#define usbi_callocz(ctx,num,siz)		\
+  (void *) allocpolicy_calloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , "Byte[" #num "][" #siz "]"		\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , (ulong)(num)				\
+    , siz					\
+    )
 
-typedef void LogEndProc
-  ( void *       data
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
+// Reallocate memory to be able to hold an object of given type
+#define usbi_realloc(ctx,ptr,typ)		\
+  (typ *) allocpolicy_realloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , #typ					\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , ptr					\
+    , sizeof(typ)				\
+    )
 
-typedef LogLevel LogGetLevelProc(void *data);
-typedef void     LogSetLevelProc(void *data, LogLevel level);
-typedef LogFlags LogGetFlagsProc(void *data);
-typedef void     LogSetFlagsProc(void *data, LogFlags flags);
+// Reallocate memory by size
+#define usbi_reallocz(ctx,ptr,siz)		\
+  (Byte *) allocpolicy_realloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , "Byte[" #siz "]"				\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , ptr					\
+    , siz					\
+    )
 
-typedef struct LogPolicy
-  { void *	      data;	    // arbitrary log control cata
-    LogBegProc	    * beg;	    // Begin log entry with header
-    LogLogProc	    * log;	    // Output some log entry content
-    LogEndProc	    * end;	    // Terminate this log entry.
-    LogGetLevelProc * get_level;    // Get the current logging level
-    LogSetLevelProc * set_level;    // Set the current logging level
-    LogGetFlagsProc * get_flags;    // Get the currnet logging flags
-    LogSetFlagsProc * set_flags;    // Set the current logging flags
-  }
-LogPolicy;
+// Resize an array by type and number
+#define usbi_recalloc(ctx,ptr,num,typ)		\
+  (typ *) allocpolicy_recalloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , #typ "[" #num "]"				\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , ptr					\
+    , (ulong)(num)				\
+    , sizeof(typ)				\
+    )
 
-// These functions make calls through a logpolicy to implement the current
-// logging policy.
+// Resize an array of memory chunks by size and type
+#define usbi_recallocz(ctx,ptr,num,siz)		\
+  (Byte *)allocpolicy_recalloc			\
+    ( libusb_context_get_allocator(ctx)		\
+    , "Byte[" #num "][" #siz "]"		\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , ptr					\
+    , (ulong)(num)				\
+    , siz					\
+    )
 
-// Acquire any needed locks on and/or open output streams, and output any
-// initial header info for a log entry.
-void logpolicy_beg
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
+// Free an allocated region of memory
+#define usbi_free(ctx,ptr)			\
+  allocpolicy_free				\
+    ( libusb_context_get_allocator(ctx)		\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , ptr					\
+    )
 
-// Output some or all of a log header and/or entry.
-void logpolicy_vmid
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , va_list      args
-  )
-GCC_PRINTF(7,0);
+// allocate and return a formatted string.
+#define usbi_asprintf(ctx,bufp,...)		\
+  allocpolicy_asprintf				\
+    ( libusb_context_get_allocator(ctx)		\
+    , "asprintf(" #__VA_ARGS__ ")"		\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , __VA_ARGS__
+    )
 
-// Output some or all of a log header and/or entry.
-void logpolicy_mid
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , ...
-  )
-GCC_PRINTF(7,8);
+// Allocate and return a vprintf'ed string
+#define usbi_vasprintf(ctx,bufp,fmt,args)	\
+  allocpolicy_vasprintf				\
+    ( libusb_context_get_allocator(ctx)		\
+    , "vasprintf(" #fmt ", args)"		\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , fmt, args					\
+    )
 
-// Output any trailing log entry info, and optionally flush and close streams
-// and release any output locks.
-void logpolicy_end
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
-
-// Convenience function that combines the beg, mid, and end functions above.
-void logpolicy_log
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , ...
-  )
-GCC_PRINTF(7,8);
-
-// Convenience function that combines the beg, vmid, and end functions above.
-void logpolicy_vlog
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , va_list      args
-  )
-GCC_PRINTF(7,0);
-
-// Convenience function that combines bed and end, but no message, for tracing.
-void logpolicy_trace
-  ( LogPolicy *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
-
-extern LogPolicy        const logPolicy_default;
-extern libusb_allocator const allocator_default;
+// Allocate and return the duplicate of a string.
+#define usbi_strdup(ctx,str)			\
+  allocpolicy_strdup				\
+    ( libusb_context_get_allocator(ctx)		\
+    , "strdup(" #str ")"			\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , str					\
+    )
 
 #endif

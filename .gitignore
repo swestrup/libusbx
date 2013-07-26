@@ -46,3 +46,4 @@ Release
 *.patch
 *~
 *.orig
+.libs
