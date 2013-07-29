@@ -59,11 +59,6 @@ const struct usbi_os_backend * const usbi_backend = &wince_backend;
 #error "Unsupported OS"
 #endif
 
-const struct libusb_version libusb_version_internal = {
-	LIBUSB_MAJOR, LIBUSB_MINOR, LIBUSB_MICRO, LIBUSB_NANO, LIBUSB_RC,
-	LIBUSB_DESCRIBE
-};
-
 struct libusb_context *usbi_default_context = NULL;
 static const struct libusb_version libusb_version_internal =
 	{ LIBUSB_MAJOR, LIBUSB_MINOR, LIBUSB_MICRO, LIBUSB_NANO,
@@ -335,6 +330,12 @@ if (cfg != desired)
  */
 
 /**
+ * @defgroup alloc Memory allocation and management.
+ * This page details the memory allocator interface and how to create your own
+ * memory allocator for use by libusb.
+ */
+
+/**
  * @defgroup dev Device handling and enumeration
  * The functionality documented below is designed to help with the following
  * operations:
@@ -447,6 +448,30 @@ libusb_free_device_list(list, 1);
 
 /** @defgroup misc Miscellaneous */
 
+/** \ingroup lib
+ * Returns the current logger that is set in the given context.
+ *
+ * \param[in] ctx libusb context to get the logger from.
+ * \returns a pointer to a libusb_logger.
+ */
+libusb_logger * LIBUSB_CALL libusb_context_get_logger(libusb_context *ctx)
+{
+	return ctx->logger;
+}
+
+/** \ingroup lib
+ * Returns the current allocator that is set in the given context.
+ *
+ * \param[in] ctx libusb context to get the logger from.
+ * \returns a pointer to a libusb_allocator
+ */
+libusb_allocator * LIBUSB_CALL libusb_context_get_allocator(libusb_context *ctx)
+{
+	return ctx->allocator;
+}
+
+
+
 /* we traverse usbfs without knowing how many devices we are going to find.
  * so we create this discovered_devs model which is similar to a linked-list
  * which grows when required. it can be freed once discovery has completed,
@@ -454,10 +479,13 @@ libusb_free_device_list(list, 1);
  * itself. */
 #define DISCOVERED_DEVICES_SIZE_STEP 8
 
-static struct discovered_devs *discovered_devs_alloc(void)
+static struct discovered_devs *discovered_devs_alloc(libusb_context * ctx)
 {
-	struct discovered_devs *ret =
-		malloc(sizeof(*ret) + (sizeof(void *) * DISCOVERED_DEVICES_SIZE_STEP));
+	struct discovered_devs *ret;
+
+	USBI_GET_CONTEXT(ctx);
+
+	ret = usbi_allocz(ctx,sizeof(*ret) + (sizeof(void *) * DISCOVERED_DEVICES_SIZE_STEP));
 
 	if (ret) {
 		ret->len = 0;
@@ -484,7 +512,7 @@ struct discovered_devs *discovered_devs_append(
 	/* exceeded capacity, need to grow */
 	usbi_dbg(DEVICE_CTX(dev),"need to increase capacity");
 	capacity = discdevs->capacity + DISCOVERED_DEVICES_SIZE_STEP;
-	discdevs = usbi_reallocf(discdevs,
+	discdevs = usbi_realloc(discdevs,
 		sizeof(*discdevs) + (sizeof(void *) * capacity));
 	if (discdevs) {
 		discdevs->capacity = capacity;
@@ -655,7 +683,7 @@ struct libusb_device *usbi_get_device_by_session_id(struct libusb_context *ctx,
 ssize_t API_EXPORTED libusb_get_device_list(libusb_context *ctx,
 	libusb_device ***list)
 {
-	struct discovered_devs *discdevs = discovered_devs_alloc();
+	struct discovered_devs *discdevs = discovered_devs_alloc(ctx);
 	struct libusb_device **ret;
 	int r = 0;
 	ssize_t i, len;
@@ -1789,11 +1817,9 @@ void API_EXPORTED libusb_set_debug(libusb_context *ctx, int level)
  * to one of the user's choosing.
  *
  * \param ctx the context to operate on, or NULL for the default context
- * \param logger the logging function to register for this context
- * \param log_data arbitrary context data to pass to the logging function.
+ * \param logger the alternate logger to register for this context
  */
-void API_EXPORTED libusb_set_logger(libusb_context *ctx,
-	libusb_logger *logger, void *log_data)
+void API_EXPORTED libusb_set_logger(libusb_context *ctx, libusb_logger *logger)
 {
 	USBI_GET_CONTEXT(ctx);
 	ctx->logger = logger;
@@ -1870,39 +1896,43 @@ void usbi_log(struct libusb_context *ctx, enum usbi_log_level level,
 }
 
 /** \ingroup lib
- * Initialize libusb. This function must be called before calling any other
- * libusbx function.
- *
- * If you do not provide an output location for a context pointer, a default
- * context will be created. If there was already a default context, it will
- * be reused (and nothing will be initialized/reinitialized).
- *
+ * Initialize libusb and optionally set any alternative facilities. Either
+ * this function or libusb_init must be called before calling any other
+ * libusbx function. Calling this function with a NULL policy pointer, or
+ * with policy set to all NULLs has the identical effect of calling
+ * libusb_init.
+ * 
  * \param context Optional output location for context pointer.
  * Only valid on return code 0.
- * \param logger Optional policy object for specifying alternative facilies
+ * \param policy Optional policy object for specifying alternative facilies
  * for logging and/or memory allocation, or NULL for default facilities.
  * \returns 0 on success, or a LIBUSB_ERROR code on failure
  * \see contexts
  *
- * NOTE: The logger and logdata parameters should be replaced with a single
- * libusb_policy object pointer that encapsulates logging and memory
- * allocation facilities, with NULL defaulting the policies.
  */
-int API_EXPORTED libusb_init(libusb_context **context, libusb_logger *logger,
-  void *logdata)
+int API_EXPORTED libusb_init(libusb_context **context, libusb_policy *policy)
 {
 	struct libusb_device *dev, *next;
 	char *dbg = getenv("LIBUSB_DEBUG");
 	struct libusb_context *ctx;
 	static int first_init = 1;
 	int r = 0;
+	libusb_allocator * allocator = libusb_default_allocator;
+	libusb_logger    * logger    = libusb_default_logger;
+
+	if( policy ) {
+		if( policy->logger )
+			logger = policy->logger;
+		if( policy->allocator )
+			allocator = policy->allocator;
+	}
+		
 
 	usbi_mutex_static_lock(&default_context_lock);
 
 	if (!timestamp_origin.tv_sec) {
 		usbi_gettimeofday(&timestamp_origin, NULL);
 	}
-
 	if (!context && usbi_default_context) {
 		usbi_dbg("reusing default context");
 		default_context_refcnt++;
@@ -1910,12 +1940,14 @@ int API_EXPORTED libusb_init(libusb_context **context, libusb_logger *logger,
 		return 0;
 	}
 
-	ctx = calloc(1, sizeof(*ctx));
+	ctx = usbi_raw_allocate(allocator,"libusb_context",NULL,1,
+		sizeof(libusb_context));
 	if (!ctx) {
 		r = LIBUSB_ERROR_NO_MEM;
 		goto err_unlock;
 	}
-
+	// we replaced a calloc which returns zeroed memory, so...
+	memset(ctx,0,sizeof(libusb_context));
 #ifdef ENABLE_DEBUG_LOGGING
 	ctx->debug = LIBUSB_LOG_LEVEL_DEBUG;
 #endif
@@ -1939,11 +1971,18 @@ int API_EXPORTED libusb_init(libusb_context **context, libusb_logger *logger,
 	if (!usbi_default_context) {
 		usbi_default_context = ctx;
 		default_context_refcnt++;
-		usbi_dbg("created default context");
+		usbi_dbg(ctx,"created default context");
 	}
 
-	usbi_dbg("libusbx v%d.%d.%d.%d", libusb_version_internal.major, libusb_version_internal.minor,
+	usbi_dbg(ctx,"libusbx v%d.%d.%d.%d", libusb_version_internal.major, libusb_version_internal.minor,
 		libusb_version_internal.micro, libusb_version_internal.nano);
+
+#ifdef ENABLE_DEBUG_LOGGING
+	usbi_dbg(ctx,"Logging active due to --enable-debug-log");
+#else
+	if( ctx->debug )
+	  usbi_dbg(ctx,"Logging active due to LIBUSB_DEBUG");
+#endif
 
 	usbi_mutex_init(&ctx->usb_devs_lock, NULL);
 	usbi_mutex_init(&ctx->open_devs_lock, NULL);
@@ -1999,10 +2038,30 @@ err_free_ctx:
 	}
 	usbi_mutex_unlock(&ctx->usb_devs_lock);
 
-	free(ctx);
+	usbi_free(ctx,ctx);
 err_unlock:
 	usbi_mutex_static_unlock(&default_context_lock);
 	return r;
+}
+
+
+/** \ingroup lib
+ * Initialize libusb. This function must be called before calling any other
+ * libusbx function.
+ *
+ * If you do not provide an output location for a context pointer, a default
+ * context will be created. If there was already a default context, it will
+ * be reused (and nothing will be initialized/reinitialized).
+ *
+ * \param context Optional output location for context pointer.
+ * Only valid on return code 0.
+ * \returns 0 on success, or a LIBUSB_ERROR code on failure
+ * \see contexts
+ *
+ */
+int API_EXPORTED libusb_init(libusb_context **context)
+{
+	return libusb_init_full(context,NULL);
 }
 
 /** \ingroup lib
@@ -2014,7 +2073,6 @@ void API_EXPORTED libusb_exit(struct libusb_context *ctx)
 {
 	struct libusb_device *dev, *next;
 
-	usbi_dbg("");
 	USBI_GET_CONTEXT(ctx);
 
 	/* if working with default context, only actually do the deinitialization
@@ -2059,7 +2117,7 @@ void API_EXPORTED libusb_exit(struct libusb_context *ctx)
 	usbi_mutex_destroy(&ctx->open_devs_lock);
 	usbi_mutex_destroy(&ctx->usb_devs_lock);
 	usbi_mutex_destroy(&ctx->hotplug_cbs_lock);
-	free(ctx);
+	usbi_free(ctx,ctx);
 }
 
 /** \ingroup misc
@@ -2136,6 +2194,33 @@ int usbi_gettimeofday(struct timeval *tp, void *tzp)
 	return 0;
 }
 #endif
+
+// Get a current timestamp as a floating-point number of seconds since the
+// first libusb_init call in the program. This call will return 0 if
+// libusb_init has yet to be called, but will initialize the starting value
+// for use in subsequent calls.
+double usbi_gettimestamp(void)
+{
+	struct timeval now;
+
+	if (!timestamp_origin.tv_sec) {
+		usbi_gettimeofday(&timestamp_origin, NULL);
+		return 0.0;
+	}
+
+	usbi_gettimeofday(&now,NULL);
+
+	if (now.tv_usec < timestamp_origin.tv_usec) {
+		now.tv_sec--;
+		now.tv_usec += 1000000;
+	}
+	now.tv_sec  -= timestamp_origin.tv_sec;
+	now.tv_usec -= timestamp_origin.tv_usec;
+
+	double stamp = (double)now.tv_sec + (((double)now.tv_usec)/1000000.0);
+
+	return stamp;
+}
 
 static void usbi_log_str(struct libusb_context *ctx, const char * str)
 {

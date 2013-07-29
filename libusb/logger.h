@@ -9,166 +9,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "macros.h"
-
-// Define abstract allocation and logging policies, for concrete
-// instances to conform to.
-
-typedef unsigned long unsigned_long;
-
-#if !defined(ulong)
-  #define ulong unsigned_long
-#endif
-
-typedef void * PoolAllocProc
-  ( void *       pool
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , size_t       size
-  , ulong	 count
-  );
-
-typedef void * PoolReallocProc
-  ( void *       pool
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , void *       mem
-  , size_t       size
-  , ulong	 count
-  );
-
-typedef void   PoolFreeProc
-  ( void *       pool
-  , char const * file
-  , char const * func
-  , long	 line
-  , void *       mem
-  );
-
-typedef void * PoolVisitProc
-  ( void *       pool
-  , void *       walkinfo
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , void *       mem
-  , size_t       size
-  , ulong	 count
-  );
-
-typedef void   PoolWalkProc
-  ( void *	    pool
-  , void *	    walkinfo
-  , PoolVisitProc * entry
-  );
-
-typedef struct AllocPolicy
-  { void	    * pool;	    // arbitrary pool info
-    PoolAllocProc   * alloc;
-    PoolReallocProc * realloc;
-    PoolFreeProc    * free;
-    PoolWalkProc    * walk;
-  }
-AllocPolicy;
-
-// These functions make calls through an AllocPolicy to implement the current
-// memory allocation policy.
-
-void *allocpolicy_alloc
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , size_t	  size
-  );
-
-void *allocpolicy_calloc
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , size_t	  size
-  , ulong	  count
-  );
-
-void *allocpolicy_realloc
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , void       *  mem
-  , size_t	  size
-  );
-
-void *allocpolicy_recalloc
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , void       *  mem
-  , size_t	  size
-  , ulong	  count
-  );
-
-void allocpolicy_free
-  ( AllocPolicy * pol
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , void       *  mem
-  );
-
-void *allocpolicy_walk
-  ( AllocPolicy *   pol
-  , void *	    walkinfo
-  , PoolVisitProc * entry
-  );
-
-// Some convenience functions
-
-int allocpolicy_vasprintf
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char **       bufp
-  , const char *  format
-  , va_list       args
-  )
-GCC_PRINTF(7,0);
-
-int allocpolicy_asprintf
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char **       bufp
-  , const char *  format
-  , ...
-  )
-GCC_PRINTF(7,8);
-
-char *allocpolicy_strdup
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char const *  str
-  );
-
-
 // Note: This logging policy should actually have an embedded concept of
 // output logging streams, and ways to attach/detach and enable/disable
 // streams based on predicate callbacks so that, for instance, the stdout
@@ -204,7 +44,7 @@ typedef void LogBegProc
   , long	 line
   );
 
-typedef void LogLogProc
+typedef void (LogLogProc)
   ( void *       data
   , LogLevel     level
   , LogFlags     flags
@@ -213,8 +53,7 @@ typedef void LogLogProc
   , long	 line
   , char const * format
   , va_list      args
-  )
-GCC_PRINTF(7,0);
+  );
 
 typedef void LogEndProc
   ( void *       data
@@ -230,7 +69,7 @@ typedef void     LogSetLevelProc(void *data, LogLevel level);
 typedef LogFlags LogGetFlagsProc(void *data);
 typedef void     LogSetFlagsProc(void *data, LogFlags flags);
 
-typedef struct LogPolicy
+typedef struct libusb_logger
   { void *	      data;	    // arbitrary log control cata
     LogBegProc	    * beg;	    // Begin log entry with header
     LogLogProc	    * log;	    // Output some log entry content
@@ -240,7 +79,7 @@ typedef struct LogPolicy
     LogGetFlagsProc * get_flags;    // Get the currnet logging flags
     LogSetFlagsProc * set_flags;    // Set the current logging flags
   }
-LogPolicy;
+libusb_logger;
 
 // These functions make calls through a logpolicy to implement the current
 // logging policy.
@@ -248,7 +87,7 @@ LogPolicy;
 // Acquire any needed locks on and/or open output streams, and output any
 // initial header info for a log entry.
 void logpolicy_beg
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -258,7 +97,7 @@ void logpolicy_beg
 
 // Output some or all of a log header and/or entry.
 void logpolicy_vmid
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -266,12 +105,11 @@ void logpolicy_vmid
   , long	 line
   , char const * format
   , va_list      args
-  )
-GCC_PRINTF(7,0);
+  );
 
 // Output some or all of a log header and/or entry.
 void logpolicy_mid
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -279,13 +117,12 @@ void logpolicy_mid
   , long	 line
   , char const * format
   , ...
-  )
-GCC_PRINTF(7,8);
+  );
 
 // Output any trailing log entry info, and optionally flush and close streams
 // and release any output locks.
 void logpolicy_end
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -295,7 +132,7 @@ void logpolicy_end
 
 // Convenience function that combines the beg, mid, and end functions above.
 void logpolicy_log
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -303,12 +140,11 @@ void logpolicy_log
   , long	 line
   , char const * format
   , ...
-  )
-GCC_PRINTF(7,8);
+  );
 
 // Convenience function that combines the beg, vmid, and end functions above.
 void logpolicy_vlog
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -316,12 +152,11 @@ void logpolicy_vlog
   , long	 line
   , char const * format
   , va_list      args
-  )
-GCC_PRINTF(7,0);
+  );
 
 // Convenience function that combines bed and end, but no message, for tracing.
 void logpolicy_trace
-  ( LogPolicy *  pol
+  ( libusb_logger *  pol
   , LogLevel     level
   , LogFlags     flags
   , char const * filename
@@ -329,7 +164,6 @@ void logpolicy_trace
   , long	 line
   );
 
-extern LogPolicy   const logPolicy_default;
-extern AllocPolicy const allocPolicy_default;
+extern libusb_logger const logPolicy_default;
 
 #endif

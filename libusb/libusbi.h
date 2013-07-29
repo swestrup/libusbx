@@ -39,6 +39,8 @@
 #include "libusb.h"
 #include "version.h"
 
+#include "allocatori.h"
+
 /* Inside the libusbx code, mark all public functions as follows:
  *   return_type API_EXPORTED function_name(params) { ... }
  * But if the function returns a pointer, mark it as follows:
@@ -168,6 +170,7 @@ void usbi_log_v(struct libusb_context *ctx, enum libusb_log_level level,
 #define usbi_info(ctx, ...) _usbi_log(ctx, LIBUSB_LOG_LEVEL_INFO, __VA_ARGS__)
 #define usbi_warn(ctx, ...) _usbi_log(ctx, LIBUSB_LOG_LEVEL_WARNING, __VA_ARGS__)
 #define usbi_err(ctx, ...) _usbi_log(ctx, LIBUSB_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define usbi_dbg(ctx, ...) _usbi_log(ctx, LIBUSB_LOG_LEVEL_DEBUG, __VA_ARGS__)
 
 #else /* !defined(_MSC_VER) || _MSC_VER >= 1400 */
 
@@ -239,8 +242,15 @@ static inline void usbi_dbg(const char *format, ...)
 extern struct libusb_context *usbi_default_context;
 
 struct libusb_context {
-	int debug;
+
+        int debug;
 	int debug_fixed;
+
+        /* context-specific memory allocator */
+        libusb_allocator * allocator;
+
+        /* context-specific debug/logging routines */
+        libusb_logger    * logger;
 
 	/* internal control pipe, used for interrupting event handling when
 	 * something needs to modify poll fds. */

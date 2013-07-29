@@ -24,6 +24,20 @@
 #ifndef LIBUSB_H
 #define LIBUSB_H
 
+#if defined(strdup)
+  #undef strdup
+#endif
+
+#define free FREEX
+#define malloc MALLOCX
+#define calloc CALLOCX
+#define realloc REALLOCX
+#define strdup STRDUPX
+#define vasprintf VASPRINTFX
+#define asprintf ASPRINTFX
+
+
+
 #ifdef _MSC_VER
 /* on MS environments, the inline keyword is available in C++ only */
 #if !defined(__cplusplus)
@@ -79,6 +93,9 @@ typedef unsigned long ulong;
 #include <winsock.h>
 #endif
 #endif
+
+#include "allocator.h"
+#include "logger.h"
 
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
 #define LIBUSB_DEPRECATED_FOR(f) \
@@ -1301,13 +1318,48 @@ enum libusb_log_level {
 	LIBUSB_LOG_LEVEL_DEBUG,
 };
 
-libusb_context * LIBUSB_CALL libusb_context_create(libusb_allocator *alloc);
-void LIBUSB_CALL libusb_context_dispose(libusb_context *ctx);
-void LIBUSB_CALL libusb_context_set_allocator(libusb_context *ctx,
-	libusb_allocator *alloc);
+/** \ingroup policy
+ * A structure containing pointers to alternative system facilities for use in
+ * cases (such as on embedded systems) when one may wish to replace libusb's
+ * standard methods of allocating memory, or reporting issues, with one of the
+ * user's devising.
+ *
+ * The number of facility pointers within this structure may change in the
+ * future, so it is recommeneded that this structure be initialized to all
+ * NULLs or memset to zero before setting the particular members that one
+ * wishes to use. Any NULL facility pointers will cause libusb to use its
+ * internal default for that particular facility.
+ * 
+ * for example:
+ *
+ * \code
+ * libusb_policy policy = {NULL};
+ *
+ * policy.allocator = myAllocator;
+ * int ret = libusb_init_full(NULL,&policy);
+ * \endcode
+ *
+ * Once libusb_init_full has been called, the policy structure is no longer
+ * needed and may be freed, as all information from it is contained in the
+ * libusb_context.
+ */
+typedef struct libusb_policy {
+  /** optional pointer to an alternative allocator */
+  libusb_allocator * allocator;
+
+  /** optional pointer to an alternative logger */
+  libusb_logger * logger;
+} libusb_policy;
+
+
 void LIBUSB_CALL libusb_context_set_logger(libusb_context *ctx,
 	libusb_logger *logger);
 
+libusb_logger * LIBUSB_CALL libusb_context_get_logger(libusb_context *ctx);
+libusb_allocator * LIBUSB_CALL libusb_context_get_allocator(libusb_context *ctx);
+
+int LIBUSB_CALL libusb_init_full(libusb_context **ctx, libusb_policy *policy);
+  
 int LIBUSB_CALL  libusb_init(libusb_context **ctx);
 void LIBUSB_CALL libusb_exit(libusb_context *ctx);
 void LIBUSB_CALL libusb_set_debug(libusb_context *ctx, int level);
