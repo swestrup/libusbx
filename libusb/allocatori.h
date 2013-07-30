@@ -25,6 +25,7 @@
 #include <stdlib.h>
 
 #include "libusb.h"
+#include "libusbi.h"
 
 // This header file defines functions and macros for using the abstract
 // allocation system inside libusb.
@@ -40,7 +41,7 @@
 # endif
 #endif
 
-extern libusb_allocator const libusb_default_allocator;
+extern libusb_allocator libusb_default_allocator;
 
 // This function make calls through an Allocator to implement the current
 // memory allocation policy. It is intended to be called through macros
@@ -49,26 +50,57 @@ extern libusb_allocator const libusb_default_allocator;
 // and filename. It adds a timestamp which is a floating point number of
 // seconds since the program started.
 
-void *libusb_allocator_allocate
-  ( libusb_allocator * allocator
-  , char const	     * label
-  , char const	     * file
-  , char const	     * func
-  , long	       line
-  , void	     * mem
-  , ulong	       count
-  , size_t	       size
-  );
-
-void *libusb_allocator_walk
-  ( libusb_allocator	      * allocator
-  , libusb_allocator_visit_fn * visitor
-  , void		      * visitorinfo
-  );
+static inline void *usbi_allocator_allocate(
+	libusb_allocator * allocator,
+	char const	 * label,
+	char const	 * file,
+	char const	 * func,
+	long		   line,
+	void		 * mem,
+	size_t		   head,
+	ulong		   count,
+	size_t		   size
+)
+{
+	return allocator->allocate(allocator->pool,label,file,func,line,
+		usbi_gettimestamp(),mem,head,count,size);
+}
+	
+static inline void *usbi_allocator_walk(
+	libusb_allocator	  * allocator,
+	libusb_allocator_visit_fn * visitor,
+	void		          * visitorinfo
+)
+{
+	return allocator->walk(allocator->pool,visitorinfo,visitor);
+}	
 
 // Some convenience functions, again intended to be called through macros
+//
+// The simpler of these are inlined, the more complex ones are defined in
+// allocator.c
 
-int libusb_allocator_vasprintf
+// Reallocate a memory area, or free it on failure.
+static inline void *usbi_allocator_reallocf(
+	libusb_allocator * allocator,
+	char const       * label,
+	char const       * file,
+	char const	 * func,
+	long		   line,
+	void		 * mem,
+	size_t		   head,
+	ulong		   count,
+	size_t		   size
+)
+{
+	void * ret = usbi_allocator_allocate(allocator,label,file,func,line,
+		mem, head, count, size);
+	if( !ret )
+	  usbi_allocator_allocate(allocator,label,file,func,line,mem,0,0,0);
+	return ret;
+}	
+
+int usbi_allocator_vasprintf
   ( libusb_allocator *  allocator
   , char const	     *  label
   , char const	     *  file
@@ -80,7 +112,7 @@ int libusb_allocator_vasprintf
   )
 GCC_PRINTF(7,0);
 
-int libusb_allocator_asprintf
+int usbi_allocator_asprintf
   ( libusb_allocator *  allocator
   , char const	     *  label
   , char const	     *  file
@@ -92,7 +124,7 @@ int libusb_allocator_asprintf
   )
 GCC_PRINTF(7,8);
 
-char *libusb_allocator_strdup
+char *usbi_allocator_strdup
   ( libusb_allocator * allocator
   , char const	     * label
   , char const	     * file
@@ -101,25 +133,42 @@ char *libusb_allocator_strdup
   , char const	     * str
   );
 
-extern libusb_allocator const libusb_default_allocator;
+// Label generation macros
+#define _USBI_LBL1(n,t)    t "[" #n "]"
+#define _USBI_LBL2(n,z,t)  t "[" #n "][" #z "]"
+#define _USBI_MEM1(n)      _USBI_LBL1(n,"uint8_t")
+#define _USBI_MEM2(n,z)    _USBI_LBL2(n,z,"uint8_t")
+#define _USBI_HDR(h,n,t)   #h "+" #t "[" #n "]"
+#define _USBI_PRV(h,z)     #h " + " #z "Bytes"
+
 
 // Allocation macro using specified allocator. This is only needed in cases
 // where we don't yet have a context.
-#define usbi_raw_allocate(alc,lbl,mem,cnt,siz)	\
-  libusb_allocator_allocate			\
-    ( alc					\
-    , lbl					\
-    , __FILE__, __FUNCTION__, __LINE__		\
-    , mem, cnt, siz				\
+#define usbi_raw_allocate(alc,lbl,mem,hdr,cnt,siz)	\
+  usbi_allocator_allocate				\
+    ( alc						\
+    , lbl						\
+    , __FILE__, __FUNCTION__, __LINE__			\
+    , mem, hdr, cnt, siz				\
     )
 
 // general allocation based on current context.
-#define usbi_allocate(ctx,lbl,mem,cnt,siz)	\
-  usbi_raw_allocate(libusb_context_get_allocator(ctx),lbl,mem,cnt,siz)
+#define usbi_allocate(ctx,lbl,mem,hdr,cnt,siz)		\
+  usbi_raw_allocate(libusb_context_get_allocator(ctx),lbl,mem,hdr,cnt,siz)
+
+// Reallocate-or-free a memory area with header and array
+#define usbi_rehcallocf(ctx,mem,htyp,cnt,atyp)	\
+  usbi_allocator_reallocf			\
+    ( libusb_context_get_allocator(ctx)		\
+    , _USBI_HDR(htyp,atyp,cnt)			\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , mem, sizeof(htyp), cnt, sizeof(atyp)	\
+    ) 
+
 
 // allocate and return a formatted string.
 #define usbi_asprintf(ctx,...)			\
-  libusb_allocator_asprintf			\
+  usbi_allocator_asprintf			\
     ( libusb_context_get_allocator(ctx)		\
     , "asprintf(" #__VA_ARGS__ ")"		\
     , __FILE__, __FUNCTION__, __LINE__		\
@@ -128,7 +177,7 @@ extern libusb_allocator const libusb_default_allocator;
 
 // Allocate and return a vprintf'ed string
 #define usbi_vasprintf(ctx,bufp,fmt,args)	\
-  libusb_allocator_vasprintf			\
+  usbi_allocator_vasprintf			\
     ( libusb_context_get_allocator(ctx)		\
     , "vasprintf(" #fmt ", args)"		\
     , __FILE__, __FUNCTION__, __LINE__		\
@@ -137,54 +186,61 @@ extern libusb_allocator const libusb_default_allocator;
 
 // Allocate and return the duplicate of a string.
 #define usbi_strdup(ctx,str)			\
-  libusb_allocator_strdup			\
+  usbi_allocator_strdup			        \
     ( libusb_context_get_allocator(ctx)		\
     , "strdup(" #str ")"			\
     , __FILE__, __FUNCTION__, __LINE__		\
     , str					\
     )
 
-
-// Label generation macros
-#define _LBL1(n,t)    t "[" #n "]"
-#define _LBL2(n,z,t)  t "[" #n "][" #z "]"
-#define _MEM1(n)      _LBL1(n,"uint_8")
-#define _MEM2(n,z)    _LBL2(n,z,"uint_8")
-
 // Allocate an object by type.
 #define usbi_alloc(ctx,typ)			\
-  (typ *)usbi_allocate(ctx,#typ,NULL,1,sizeof(typ))
+  (typ *)usbi_allocate(ctx,#typ,NULL,sizeof(typ),0,0)
 
 // Allocate some raw memory, by size
 #define usbi_allocz(ctx,siz)			\
-  usbi_allocate(ctx,_MEM1(siz),NULL,1,siz)
+  usbi_allocate(ctx,_USBI_MEM1(siz),NULL,1,siz)
 
 // Allocate an array of objects, by type and count.
 #define usbi_calloc(ctx,num,typ)		\
-  (typ *)usbi_allocate(ctx,_LBL1(num,#typ),NULL,num,sizeof(typ))
+  (typ *)usbi_allocate(ctx,_USBI_LBL1(num,#typ),NULL,0,num,sizeof(typ))
 
 // Allocate an array of memory chunks, by size and count
 #define usbi_callocz(ctx,num,siz)		\
-  usbi_allocate(ctx,_MEM2(num,siz),NULL,num,sizeof(typ))
+  usbi_allocate(ctx,_USBI_MEM2(num,siz),NULL,0,num,siz)
 
 // Reallocate memory to be able to hold an object of given type
 #define usbi_realloc(ctx,ptr,typ)		\
-  usbi_allocate(ctx,#typ,ptr,1,sizeof(typ))
+  usbi_allocate(ctx,#typ,ptr,sizeof(typ),0,0)
 
 // Reallocate memory by size
 #define usbi_reallocz(ctx,ptr,siz)		\
-  usbi_allocate(ctx,_MEM1(siz),ptr,1,siz)
+  usbi_allocate(ctx,_USBI_MEM1(siz),ptr,siz,0,0)
 
 // Resize an array by type and number
 #define usbi_recalloc(ctx,ptr,num,typ)		\
-  (typ *)usbi_allocate(ctx,_LBL1(num,#typ),ptr,num,sizeof(typ))
+  (typ *)usbi_allocate(ctx,_USBI_LBL1(num,#typ),ptr,num,sizeof(typ))
 
-// Resize an array of memory chunks by size and type
+// Resize an array of memory chunks by size and number
 #define usbi_recallocz(ctx,ptr,num,siz)		\
-  usbi_allocate(ctx,_MEM2(num,siz),ptr,num,sizeof(typ))
+  usbi_allocate(ctx,_USBI_MEM2(num,siz),ptr,num,siz)
 
 // Free an allocated region of memory
 #define usbi_free(ctx,ptr)			\
-  usbi_allocate(ctx,NULL,ptr,0,0)
+  usbi_allocate(ctx,NULL,ptr,0,0,0)
+
+
+//
+// Some even-less traditional allocation routines for convenience
+//
+
+// Allocate a memory region consisting of a header and an array.
+#define usbi_hcalloc(ctx,htyp,cnt,atyp)					\
+  (htyp *)usbi_allocate(ctx,_USBI_HDR(htyp,cnt,atyp),NULL,sizeof(htyp),cnt,sizeof(atyp))
+
+// Allocate space for a header and private area of a given size.
+#define usbi_hallocz(ctx,htyp,siz)					\
+  (htyp *)usbi_allocate(ctx,_USBI_PRV(htyp,siz),NULL,sizeof(htyp),1,siz)
+
 
 #endif

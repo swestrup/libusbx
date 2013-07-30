@@ -1300,23 +1300,6 @@ enum libusb_capability {
 	LIBUSB_CAP_SUPPORTS_DETACH_KERNEL_DRIVER = 0x0101
 };
 
-/** \ingroup lib
- *  Log message levels.
- *  - LIBUSB_LOG_LEVEL_NONE    (0) : no messages are ever logged
- *  - LIBUSB_LOG_LEVEL_ERROR   (1) : error messages are logged
- *  - LIBUSB_LOG_LEVEL_WARNING (2) : warning, and error messages are logged
- *  - LIBUSB_LOG_LEVEL_INFO    (3) : informational, warning, and error messages
- *                                   are logged
- *  - LIBUSB_LOG_LEVEL_DEBUG   (4) : debug, informational, warning, and error
- *				     messages are logged.
- */
-enum libusb_log_level {
-	LIBUSB_LOG_LEVEL_NONE = 0,
-	LIBUSB_LOG_LEVEL_ERROR,
-	LIBUSB_LOG_LEVEL_WARNING,
-	LIBUSB_LOG_LEVEL_INFO,
-	LIBUSB_LOG_LEVEL_DEBUG,
-};
 
 /** \ingroup policy
  * A structure containing pointers to alternative system facilities for use in

@@ -1,169 +1,91 @@
 /*
- * Copyright 2012 Userful Corporation.
+ * Allocator support for libusbx
+ * Copyright © 2013 Stirling Westrup <swestrup@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _DL_POLICY_H
-#define _DL_POLICY_H
+#ifndef LOGGER_H
+#define LOGGER_H
 
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-// Note: This logging policy should actually have an embedded concept of
-// output logging streams, and ways to attach/detach and enable/disable
-// streams based on predicate callbacks so that, for instance, the stdout
-// stream responds to minor messages only, the stderr stream responds to major
-// messages, and the file stream takes everything. Thus, it seems we need an
-// output logging stream abstraction consisting of: an output stream, a local
-// logging level, local logging flags, local output data, and a predicate
-// callback that takes the local level and flags and the message'sss level and
-// flags, and returns a boolean indicating if that stream should output the
-// message or not. However this is way overkill for what we are doing right
-// now.
+/** \ingroup log
+ *  Log message levels.
+ *  - LIBUSB_LOG_LEVEL_NONE    (0) : no messages are ever logged
+ *  - LIBUSB_LOG_LEVEL_ERROR   (1) : error messages are logged
+ *  - LIBUSB_LOG_LEVEL_WARNING (2) : warning, and error messages are logged
+ *  - LIBUSB_LOG_LEVEL_INFO    (3) : as (2) but includes informational messages 
+ *  - LIBUSB_LOG_LEVEL_DEBUG   (4) : as (3) but includes debug messages
+ *  - LIBUSB_LOG_LEVEL_TRACE   (5) : as (4) but includes internal trace messages */
+typedef enum libusb_log_level {
+	LIBUSB_LOG_LEVEL_NONE = 0,
+	LIBUSB_LOG_LEVEL_ERROR,
+	LIBUSB_LOG_LEVEL_WARNING,
+	LIBUSB_LOG_LEVEL_INFO,
+	LIBUSB_LOG_LEVEL_DEBUG,
+	LIBUSB_LOG_LEVEL_TRACE
+} libusb_log_level;
 
-typedef enum
-  { LOGLEVEL_ERROR
-  , LOGLEVEL_WARNING
-  , LOGLEVEL_INFO
-  , LOGLEVEL_NOTICE
-  , LOGLEVEL_DEBUG
-  , LOGLEVEL_TRACE
-  , LOGLEVEL_
-  }
-LogLevel;
+char const * usbi_log_level_str(libusb_log_level level);
 
-typedef uint32_t LogFlags;
-#define LOGFLAGS_ALL UINT32_MAX
+typedef void libusb_logger_entry_begin_fn(
+	void             * data,
+	libusb_log_level   level,
+	char const	 * file,
+	char const	 * func,
+	long	           line,
+	double		   stamp
+);
 
-typedef void LogBegProc
-  ( void *       data
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
+typedef void libusb_logger_entry_extend_fn(
+	void		 * data,
+	char const	 * format,
+	va_list		   args
+);
 
-typedef void (LogLogProc)
-  ( void *       data
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , va_list      args
-  );
+typedef void libusb_logger_entry_end_fn(
+	void		 * data
+);
 
-typedef void LogEndProc
-  ( void *       data
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
+typedef libusb_log_level libusb_logger_get_level_fn(void *data);
+typedef void libusb_logger_set_level_fn(void *data, libusb_log_level level);
 
-typedef LogLevel LogGetLevelProc(void *data);
-typedef void     LogSetLevelProc(void *data, LogLevel level);
-typedef LogFlags LogGetFlagsProc(void *data);
-typedef void     LogSetFlagsProc(void *data, LogFlags flags);
+typedef struct libusb_logger {
+	/** arbitrary log control data */
+	void *	      data;
 
-typedef struct libusb_logger
-  { void *	      data;	    // arbitrary log control cata
-    LogBegProc	    * beg;	    // Begin log entry with header
-    LogLogProc	    * log;	    // Output some log entry content
-    LogEndProc	    * end;	    // Terminate this log entry.
-    LogGetLevelProc * get_level;    // Get the current logging level
-    LogSetLevelProc * set_level;    // Set the current logging level
-    LogGetFlagsProc * get_flags;    // Get the currnet logging flags
-    LogSetFlagsProc * set_flags;    // Set the current logging flags
-  }
-libusb_logger;
+        /** Start a new log entry */
+	libusb_logger_entry_begin_fn  * begin;
 
-// These functions make calls through a logpolicy to implement the current
-// logging policy.
+        /** Extend the current log entry with (more) data */
+        libusb_logger_entry_extend_fn * extend;	    
 
-// Acquire any needed locks on and/or open output streams, and output any
-// initial header info for a log entry.
-void logpolicy_beg
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
+        /** Finish the log entry */
+	libusb_logger_entry_end_fn    * end;
 
-// Output some or all of a log header and/or entry.
-void logpolicy_vmid
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , va_list      args
-  );
+	/** get the current log level */
+        libusb_logger_get_level_fn    * get_level;
 
-// Output some or all of a log header and/or entry.
-void logpolicy_mid
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , ...
-  );
+	/** set the current log level */
+	libusb_logger_set_level_fn    * set_level;
+} libusb_logger;
 
-// Output any trailing log entry info, and optionally flush and close streams
-// and release any output locks.
-void logpolicy_end
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
 
-// Convenience function that combines the beg, mid, and end functions above.
-void logpolicy_log
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , ...
-  );
 
-// Convenience function that combines the beg, vmid, and end functions above.
-void logpolicy_vlog
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  , char const * format
-  , va_list      args
-  );
-
-// Convenience function that combines bed and end, but no message, for tracing.
-void logpolicy_trace
-  ( libusb_logger *  pol
-  , LogLevel     level
-  , LogFlags     flags
-  , char const * filename
-  , char const * funcname
-  , long	 line
-  );
-
-extern libusb_logger const logPolicy_default;
 
 #endif

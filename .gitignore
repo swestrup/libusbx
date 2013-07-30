@@ -47,3 +47,5 @@ Release
 *~
 *.orig
 .libs
+*.o
+*.lo

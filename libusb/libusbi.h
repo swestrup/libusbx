@@ -39,7 +39,7 @@
 #include "libusb.h"
 #include "version.h"
 
-#include "allocatori.h"
+// #include "allocatori.h"
 
 /* Inside the libusbx code, mark all public functions as follows:
  *   return_type API_EXPORTED function_name(params) { ... }
@@ -134,13 +134,6 @@ static inline void list_del(struct list_head *entry)
 	entry->next = entry->prev = NULL;
 }
 
-static inline void *usbi_reallocf(void *ptr, size_t size)
-{
-	void *ret = realloc(ptr, size);
-	if (!ret)
-		free(ptr);
-	return ret;
-}
 
 #define container_of(ptr, type, member) ({			\
       const typeof( ((type *)0)->member ) *mptr = (ptr);	\
@@ -151,8 +144,7 @@ static inline void *usbi_reallocf(void *ptr, size_t size)
 
 #define TIMESPEC_IS_SET(ts) ((ts)->tv_sec != 0 || (ts)->tv_nsec != 0)
 
-void usbi_log(struct libusb_context *ctx, enum libusb_log_level level,
-	const char *function, const char *format, ...);
+double usbi_gettimestamp(void);
 
 void usbi_log_v(struct libusb_context *ctx, enum libusb_log_level level,
 	const char *function, const char *format, va_list args);
@@ -243,7 +235,7 @@ extern struct libusb_context *usbi_default_context;
 
 struct libusb_context {
 
-        int debug;
+/*      int debug;        -- this is now the logger's domain */
 	int debug_fixed;
 
         /* context-specific memory allocator */

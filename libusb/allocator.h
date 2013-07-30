@@ -43,19 +43,33 @@
  * \param[in] line line number in file from which allocation request originated
  * \param[in] stamp timestamp (seconds) since libusbx context was initialized.
  * \param[in] mem existing memory to resize or free (or NULL)
- * \param[in] size size of a memory unit to allocate
- * \param[in] count number of contiguous memory units to allocate
+ * \param[in] head size of header to allocate
+ * \param[in] count number of contiguous memory units to allocate after header
+ * \param[in] size size of each memory unit to allocate after header
  * \returns pointer to newly allocated/realloced memory, or NULL on failure or
  *            as a result of a (successful) free operation.
  *
- * There is both a size and count provided to indicate the sizes of memory
- * regions. This is provided as a convenience so that, for example, requests
- * concerning arrays of structures may be distinguised from requests involving
- * a single structure. In general these two values should be multiplied to
- * gether to get the request size of the entire contiguous memory space.
+ * The most complex memory arrangement that this routine supports managing as
+ * a single call is one where a memory region has a header of fixed size,
+ * followed by a variable-sized area of one-or-more repeating units. This
+ * memory format is relatively common in C code, where a programmer may wish
+ * to allocate a fixed structure plus a private data area, or may wish to have
+ * a structure followed by a variable-length array.
  *
- * This function must provide several features. In general, these are the
- * features provided by the standard GCC implementation of realloc:
+ * To allow for succinct expression of these memory layouts, as well as to
+ * enable user-provided allocators to perform more informed error checking,
+ * there are three input parameters for describing the size of the memory
+ * region being manipulated: hdr, count and size. The total size of the memory
+ * area being manipulated is:
+ *
+ *     total = head + count * size
+ *
+ * Naturally the author of an allocator is free to ignore these subtleties and
+ * simply record and manipulate the total size of a region.
+ * 
+ * The allocate function provided by an allocator author must provide several
+ * features. In general, these are the features provided by the standard GCC
+ * implementation of realloc:
  *
  * - Allocation:
  *
@@ -104,8 +118,9 @@ typedef void * libusb_allocator_allocate_fn
   , long	 line
   , double	 stamp
   , void       * mem
-  , size_t       size
+  , size_t       head
   , ulong	 count
+  , size_t       size
   );
 
 /** \ingroup alloc
@@ -179,7 +194,7 @@ typedef void * libusb_allocator_visit_fn
  * visit function.
  *
  */
-typedef void libusb_allocator_walk_fn
+typedef void * libusb_allocator_walk_fn
   ( void		      * pool
   , void		      * walkinfo
   , libusb_allocator_visit_fn * visit
