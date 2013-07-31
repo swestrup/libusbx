@@ -1188,6 +1188,21 @@ enum libusb_transfer_flags {
 	 * Available since libusb-1.0.9.
 	 */
 	LIBUSB_TRANSFER_ADD_ZERO_PACKET = 1 << 3,
+
+	/** This flag has no effect unless custom memory allocators are in use.
+	 * It controls which allocator is used to free the provided transfer
+	 * buffer within libusb_free_transfer() or when the transfer flag
+	 * LIBUSB_TRANSFER_FREE_TRANSFER is set.
+	 *
+	 * If the flag is clear, then the transfer buffer will be freed via a
+	 * call to the allocator for the device the buffer was transfered
+	 * over. If the flag is set then the transfer buffer is freed via a
+	 * call to the allocator for the transfer pool itself.
+	 *
+	 * In most instances this flag is moot as the two allocators will be
+	 * the same.
+	 */
+	LIBUSB_TRANSFER_BUFFER_FROM_TRANSFER_POOL = 1<<4,
 };
 
 /** \ingroup asyncio
@@ -1369,33 +1384,34 @@ int LIBUSB_CALL libusb_get_config_descriptor(libusb_device *dev,
 	uint8_t config_index, struct libusb_config_descriptor **config);
 int LIBUSB_CALL libusb_get_config_descriptor_by_value(libusb_device *dev,
 	uint8_t bConfigurationValue, struct libusb_config_descriptor **config);
-void LIBUSB_CALL libusb_free_config_descriptor(
+void LIBUSB_CALL libusb_free_config_descriptor(libusb_device *device,
 	struct libusb_config_descriptor *config);
 int LIBUSB_CALL libusb_get_ss_endpoint_companion_descriptor(
 	struct libusb_context *ctx,
 	const struct libusb_endpoint_descriptor *endpoint,
 	struct libusb_ss_endpoint_companion_descriptor **ep_comp);
-void LIBUSB_CALL libusb_free_ss_endpoint_companion_descriptor(
+void LIBUSB_CALL libusb_free_ss_endpoint_companion_descriptor(libusb_context *ctx,
 	struct libusb_ss_endpoint_companion_descriptor *ep_comp);
 int LIBUSB_CALL libusb_get_bos_descriptor(libusb_device_handle *handle,
 	struct libusb_bos_descriptor **bos);
-void LIBUSB_CALL libusb_free_bos_descriptor(struct libusb_bos_descriptor *bos);
+void LIBUSB_CALL libusb_free_bos_descriptor(libusb_device_handle *handle,
+	struct libusb_bos_descriptor *bos);
 int LIBUSB_CALL libusb_get_usb_2_0_extension_descriptor(
 	struct libusb_context *ctx,
 	struct libusb_bos_dev_capability_descriptor *dev_cap,
 	struct libusb_usb_2_0_extension_descriptor **usb_2_0_extension);
-void LIBUSB_CALL libusb_free_usb_2_0_extension_descriptor(
+void LIBUSB_CALL libusb_free_usb_2_0_extension_descriptor(libusb_context *ctx,
 	struct libusb_usb_2_0_extension_descriptor *usb_2_0_extension);
 int LIBUSB_CALL libusb_get_ss_usb_device_capability_descriptor(
 	struct libusb_context *ctx,
 	struct libusb_bos_dev_capability_descriptor *dev_cap,
 	struct libusb_ss_usb_device_capability_descriptor **ss_usb_device_cap);
-void LIBUSB_CALL libusb_free_ss_usb_device_capability_descriptor(
+void LIBUSB_CALL libusb_free_ss_usb_device_capability_descriptor(libusb_context *ctx,
 	struct libusb_ss_usb_device_capability_descriptor *ss_usb_device_cap);
 int LIBUSB_CALL libusb_get_container_id_descriptor(struct libusb_context *ctx,
 	struct libusb_bos_dev_capability_descriptor *dev_cap,
 	struct libusb_container_id_descriptor **container_id);
-void LIBUSB_CALL libusb_free_container_id_descriptor(
+void LIBUSB_CALL libusb_free_container_id_descriptor(libusb_context *ctx,
 	struct libusb_container_id_descriptor *container_id);
 uint8_t LIBUSB_CALL libusb_get_bus_number(libusb_device *dev);
 uint8_t LIBUSB_CALL libusb_get_port_number(libusb_device *dev);
@@ -1511,7 +1527,8 @@ static inline void libusb_fill_control_setup(unsigned char *buffer,
 	setup->wLength = libusb_cpu_to_le16(wLength);
 }
 
-struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(int iso_packets);
+struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(int iso_packets,
+	libusb_allocator *alloc);
 int LIBUSB_CALL libusb_submit_transfer(struct libusb_transfer *transfer);
 int LIBUSB_CALL libusb_cancel_transfer(struct libusb_transfer *transfer);
 void LIBUSB_CALL libusb_free_transfer(struct libusb_transfer *transfer);
@@ -1743,7 +1760,8 @@ static inline unsigned char *libusb_get_iso_packet_buffer_simple(
 
 int LIBUSB_CALL libusb_control_transfer(libusb_device_handle *dev_handle,
 	uint8_t request_type, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
-	unsigned char *data, uint16_t wLength, unsigned int timeout);
+	unsigned char *data, uint16_t wLength, unsigned int timeout,
+	libusb_allocator *alloc);
 
 int LIBUSB_CALL libusb_bulk_transfer(libusb_device_handle *dev_handle,
 	unsigned char endpoint, unsigned char *data, int length,

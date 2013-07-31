@@ -30,7 +30,7 @@
 // These following functions make calls through a logpolicy to implement the
 // current logging policy.
 
-extern libusb_logger libusb_default_logger;
+extern libusb_logger * libusb_default_logger;
 
 // Acquire any needed locks on and/or open any required output streams, and
 // output any initial header info for a log entry.

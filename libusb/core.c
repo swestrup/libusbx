@@ -949,7 +949,7 @@ int API_EXPORTED libusb_get_max_packet_size(libusb_device *dev,
 		return LIBUSB_ERROR_NOT_FOUND;
 
 	r = ep->wMaxPacketSize;
-	libusb_free_config_descriptor(config);
+	libusb_free_config_descriptor(dev,config);
 	return r;
 }
 
@@ -1001,7 +1001,7 @@ int API_EXPORTED libusb_get_max_iso_packet_size(libusb_device *dev,
 
 	val = ep->wMaxPacketSize;
 	ep_type = (enum libusb_transfer_type) (ep->bmAttributes & 0x3);
-	libusb_free_config_descriptor(config);
+	libusb_free_config_descriptor(dev,config);
 
 	r = val & 0x07ff;
 	if (ep_type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS
@@ -1814,8 +1814,8 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 	struct libusb_context *ctx;
 	static int first_init = 1;
 	int r = 0;
-	libusb_allocator * allocator = &libusb_default_allocator;
-	libusb_logger    * logger    = &libusb_default_logger;
+	libusb_allocator * allocator = libusb_default_allocator;
+	libusb_logger    * logger    = libusb_default_logger;
 
 	if( policy ) {
 		if( policy->logger )
@@ -1837,7 +1837,7 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 		return 0;
 	}
 
-	ctx = usbi_raw_allocate(allocator,"libusb_context",NULL,sizeof(libusb_context),0,0);
+	ctx = usbi_raw_alloc(allocator,libusb_context);
 	if (!ctx) {
 		r = LIBUSB_ERROR_NO_MEM;
 		goto err_unlock;

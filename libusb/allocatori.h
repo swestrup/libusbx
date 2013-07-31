@@ -41,7 +41,7 @@
 # endif
 #endif
 
-extern libusb_allocator libusb_default_allocator;
+extern libusb_allocator * libusb_default_allocator;
 
 // This function make calls through an Allocator to implement the current
 // memory allocation policy. It is intended to be called through macros
@@ -96,7 +96,7 @@ static inline void *usbi_allocator_reallocf(
 	void * ret = usbi_allocator_allocate(allocator,label,file,func,line,
 		mem, head, count, size);
 	if( !ret )
-	  usbi_allocator_allocate(allocator,label,file,func,line,mem,0,0,0);
+		usbi_allocator_allocate(allocator,label,file,func,line,mem,0,0,0);
 	return ret;
 }	
 
@@ -142,8 +142,11 @@ char *usbi_allocator_strdup
 #define _USBI_PRV(h,z)     #h " + " #z "Bytes"
 
 
-// Allocation macro using specified allocator. This is only needed in cases
-// where we don't yet have a context.
+// The various usbi_raw_... allocation macros should be avoided except in
+// cases where one really doesn't have a libusb_context to pass in. As these
+// cases are rare, we've only created the macros we actually use.
+
+// general allocation based on allocator.
 #define usbi_raw_allocate(alc,lbl,mem,hdr,cnt,siz)	\
   usbi_allocator_allocate				\
     ( alc						\
@@ -152,9 +155,32 @@ char *usbi_allocator_strdup
     , mem, hdr, cnt, siz				\
     )
 
+// Allocate an object by size, and provide a label
+#define usbi_raw_allocz(alc,lbl,siz)			\
+  usbi_raw_allocate(alc,lbl,NULL,siz,0,0)
+
+// Allocate an object by type
+#define usbi_raw_alloc(alc,typ)			\
+  (typ *)usbi_raw_allocate(alc,#typ,NULL,sizeof(typ),0,0)
+
+// Free an object
+#define usbi_raw_free(alc,ptr)			\
+  usbi_raw_allocate(alc,NULL,ptr,0,0,0)
+
+
 // general allocation based on current context.
 #define usbi_allocate(ctx,lbl,mem,hdr,cnt,siz)		\
   usbi_raw_allocate(libusb_context_get_allocator(ctx),lbl,mem,hdr,cnt,siz)
+
+// Reallocate-or-free a memory area holding an array
+#define usbi_recallocf(ctx,mem,cnt,atyp)	\
+  usbi_allocator_reallocf			\
+    ( libusb_context_get_allocator(ctx)		\
+    , _USBI_LBL1(cnt,#atyp)			\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , mem, 0, cnt, sizeof(atyp)		        \
+    ) 
+
 
 // Reallocate-or-free a memory area with header and array
 #define usbi_rehcallocf(ctx,mem,htyp,cnt,atyp)	\
@@ -199,7 +225,7 @@ char *usbi_allocator_strdup
 
 // Allocate some raw memory, by size
 #define usbi_allocz(ctx,siz)			\
-  usbi_allocate(ctx,_USBI_MEM1(siz),NULL,1,siz)
+  usbi_allocate(ctx,_USBI_MEM1(siz),NULL,siz,0,0)
 
 // Allocate an array of objects, by type and count.
 #define usbi_calloc(ctx,num,typ)		\
@@ -219,11 +245,11 @@ char *usbi_allocator_strdup
 
 // Resize an array by type and number
 #define usbi_recalloc(ctx,ptr,num,typ)		\
-  (typ *)usbi_allocate(ctx,_USBI_LBL1(num,#typ),ptr,num,sizeof(typ))
+  (typ *)usbi_allocate(ctx,_USBI_LBL1(num,#typ),ptr,0,num,sizeof(typ))
 
 // Resize an array of memory chunks by size and number
 #define usbi_recallocz(ctx,ptr,num,siz)		\
-  usbi_allocate(ctx,_USBI_MEM2(num,siz),ptr,num,siz)
+  usbi_allocate(ctx,_USBI_MEM2(num,siz),ptr,0,num,siz)
 
 // Free an allocated region of memory
 #define usbi_free(ctx,ptr)			\

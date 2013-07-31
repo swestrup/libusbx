@@ -24,6 +24,8 @@
 #include <string.h>
 
 #include "libusbi.h"
+#include "allocatori.h"
+#include "loggeri.h"
 
 /**
  * @defgroup syncio Synchronous device I/O
@@ -80,6 +82,7 @@ static void sync_transfer_wait_for_completion(struct libusb_transfer *transfer)
  * \param timeout timeout (in millseconds) that this function should wait
  * before giving up due to no response being received. For an unlimited
  * timeout, use value 0.
+ * \param alloc optional alternative allocator to use, or NULL
  * \returns on success, the number of bytes actually transferred
  * \returns LIBUSB_ERROR_TIMEOUT if the transfer timed out
  * \returns LIBUSB_ERROR_PIPE if the control request was not supported by the
@@ -89,9 +92,10 @@ static void sync_transfer_wait_for_completion(struct libusb_transfer *transfer)
  */
 int API_EXPORTED libusb_control_transfer(libusb_device_handle *dev_handle,
 	uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
-	unsigned char *data, uint16_t wLength, unsigned int timeout)
+	unsigned char *data, uint16_t wLength, unsigned int timeout,
+	libusb_allocator *alloc)
 {
-	struct libusb_transfer *transfer = libusb_alloc_transfer(0);
+	struct libusb_transfer *transfer = libusb_alloc_transfer(0,alloc);
 	unsigned char *buffer;
 	int completed = 0;
 	int r;

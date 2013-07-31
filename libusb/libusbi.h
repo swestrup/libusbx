@@ -39,8 +39,6 @@
 #include "libusb.h"
 #include "version.h"
 
-// #include "allocatori.h"
-
 /* Inside the libusbx code, mark all public functions as follows:
  *   return_type API_EXPORTED function_name(params) { ... }
  * But if the function returns a pointer, mark it as follows:
@@ -376,6 +374,7 @@ enum {
 struct usbi_transfer {
 	int num_iso_packets;
 	struct list_head list;
+	libusb_allocator * allocator;  /* allocator used to create this buffer */
 	struct timeval timeout;
 	int transferred;
 	uint8_t flags;

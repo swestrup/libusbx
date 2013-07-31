@@ -25,6 +25,8 @@
 #include <string.h>
 
 #include "libusbi.h"
+#include "allocatori.h"
+#include "loggeri.h"
 
 #define DESC_HEADER_LENGTH		2
 #define DEVICE_DESC_LENGTH		18
@@ -33,10 +35,85 @@
 #define ENDPOINT_DESC_LENGTH		7
 #define ENDPOINT_AUDIO_DESC_LENGTH	9
 
+
 /** @defgroup desc USB descriptors
  * This page details how to examine the various standard USB descriptors
  * for detected devices
  */
+
+/* NOTE: Several API changes were required in this file.
+
+   I didn't like having to change the API here for any of the descriptor free
+   functions in this file, but I didn't see much choice if we want to have
+   per-context pluggable allocators. (we want them per-context because there
+   are scenarios on embedded systems where we want to limit or track memory
+   use on a connection-by-connection basis).
+   
+   The descriptor free functions (those with names of the form
+   libusb_free_..._descriptor) are a particularly difficult case to handle, as
+   they are, in general, simple transparent structures that one would normally
+   just pass to free() to get rid of. After much thought I decided to look at
+   whatever was required to create the structure, and require that same thing
+   to free it.
+   
+   This was the conceptually simplest change, as I assumed that random
+   code was likely to have handy a pointer to the object from which a
+   descriptor was derived. Basically, I am hoping that this has the
+   effect of not requiring much change to end-user code, but that is hard to
+   predict. There are a few other options we could have gone for here, and I
+   figure I should share the options I considered with their own pros and
+   cons:
+
+   1) Require the pluggable allocators to prepend a fixed header to every
+      memory allocation, such that we can look at any allocated area and know
+      its size and the allocator that created it. This would create a
+      huge amount of extra memory overhead. The current allocation scheme
+      does pass in a large amount of extraneous data to the allocator (which
+      file, line, etc. the request came from) but there is no mandatory
+      requirement to store it, so that lean and mean allocators are possible.
+
+   2) Add a private field to ..._descriptor structs to hold information like
+      the context in which it was allocated. However it appears a deliberate
+      design decision of libusb that ..._descriptor structs should ONLY
+      contain the mandated data from the USB standards, and I can respect
+      that. If a decision was made to relax that, this might be the best option.
+      
+   3) Require a libusb_context * instead of a pointer to the creating object
+      (such as a libusb_device, or libusb_device_handle) that the descriptor
+      was pulled from. This has the advantage that context pointers are
+      already so ubiquitously required in this library that one is likely
+      hanging around. As well, it allows the use of the NULL context in simple
+      cases. However, its also possible that someone writing code to work at
+      the libusb_device level has decided he can do without context ponters as
+      the devices have their own context references. (Certainly, my own usb
+      driver code does that.) In this case they'd be forced to keep a
+      redundant libusb_context handy or to extract one from the libusb_device,
+      and I don't think there's is a way to do that within the API. This
+      option becomes somewhat more appealing if we were to add a
+      libusb_device_get_context function to the API.
+
+   4) Because these are essentially convenience functions, and there's not
+      much harm in letting the user free the descriptor structs themselves, we
+      could decide to append an explicit libusb_allocator * as a final
+      argument, and use NULL to represent the default allocator, as
+      usual. This would have the smallest impact on existing code, as it would
+      just require the adding of a final NULL to each existng use of the
+      function. However, it would make things harder for those who are
+      actually using different per-context allocators to monitor things, as
+      they then not only have to keep a context handy, as in (3) above, but
+      then have to use something like libusb_context_get_allocator to
+      determine which allocator is associated with that context. This seems
+      like a lot of work to use a simple free function, but I suppose some
+      would find this option preferable to the one I chose.
+
+   In short, I thought about what I was doing here, but I'm far from wedded to
+   the option I chose. Luckily, if we decide to go some other route, its not
+   hard to change the handful of descriptor free functions to work some other
+   way.
+
+   -- Stirling Westrup
+      
+*/   
 
 /* set host_endian if the w values are already in host endian format,
  * as opposed to bus endian. */
@@ -90,10 +167,10 @@ int usbi_parse_descriptor(const unsigned char *source, const char *descriptor,
 	return (int) (sp - source);
 }
 
-static void clear_endpoint(struct libusb_endpoint_descriptor *endpoint)
+static void clear_endpoint(libusb_context * ctx, struct libusb_endpoint_descriptor *endpoint)
 {
 	if (endpoint->extra)
-		free((unsigned char *) endpoint->extra);
+		usbi_free(ctx,(unsigned char *)endpoint->extra);
 }
 
 static int parse_endpoint(struct libusb_context *ctx,
@@ -173,7 +250,7 @@ static int parse_endpoint(struct libusb_context *ctx,
 		return parsed;
 	}
 
-	extra = malloc(len);
+	extra = usbi_allocz(ctx,len);
 	endpoint->extra = extra;
 	if (!extra) {
 		endpoint->extra_length = 0;
@@ -186,7 +263,7 @@ static int parse_endpoint(struct libusb_context *ctx,
 	return parsed;
 }
 
-static void clear_interface(struct libusb_interface *usb_interface)
+static void clear_interface(libusb_context *ctx, struct libusb_interface *usb_interface)
 {
 	int i;
 	int j;
@@ -197,15 +274,15 @@ static void clear_interface(struct libusb_interface *usb_interface)
 				(struct libusb_interface_descriptor *)
 				usb_interface->altsetting + i;
 			if (ifp->extra)
-				free((void *) ifp->extra);
+				usbi_free(ctx,(void *) ifp->extra);
 			if (ifp->endpoint) {
 				for (j = 0; j < ifp->bNumEndpoints; j++)
-					clear_endpoint((struct libusb_endpoint_descriptor *)
+					clear_endpoint(ctx,(struct libusb_endpoint_descriptor *)
 						ifp->endpoint + j);
-				free((void *) ifp->endpoint);
+				usbi_free(ctx,(void *) ifp->endpoint);
 			}
 		}
-		free((void *) usb_interface->altsetting);
+		usbi_free(ctx, (void *) usb_interface->altsetting);
 		usb_interface->altsetting = NULL;
 	}
 
@@ -230,9 +307,8 @@ static int parse_interface(libusb_context *ctx,
 	while (size >= INTERFACE_DESC_LENGTH) {
 		struct libusb_interface_descriptor *altsetting =
 			(struct libusb_interface_descriptor *) usb_interface->altsetting;
-		altsetting = usbi_reallocf(altsetting,
-			sizeof(struct libusb_interface_descriptor) *
-			(usb_interface->num_altsetting + 1));
+		altsetting = usbi_recallocf(ctx,altsetting,(usb_interface->num_altsetting + 1),
+			struct libusb_interface_descriptor);
 		if (!altsetting) {
 			r = LIBUSB_ERROR_NO_MEM;
 			goto err;
@@ -310,7 +386,7 @@ static int parse_interface(libusb_context *ctx,
 		/*  drivers to later parse */
 		len = (int)(buffer - begin);
 		if (len) {
-			ifp->extra = malloc(len);
+			ifp->extra = usbi_allocz(ctx,len);
 			if (!ifp->extra) {
 				r = LIBUSB_ERROR_NO_MEM;
 				goto err;
@@ -322,7 +398,7 @@ static int parse_interface(libusb_context *ctx,
 		if (ifp->bNumEndpoints > 0) {
 			struct libusb_endpoint_descriptor *endpoint;
 			tmp = ifp->bNumEndpoints * sizeof(struct libusb_endpoint_descriptor);
-			endpoint = malloc(tmp);
+			endpoint = usbi_calloc(ctx,ifp->bNumEndpoints,struct libusb_endpoint_descriptor);
 			ifp->endpoint = endpoint;
 			if (!endpoint) {
 				r = LIBUSB_ERROR_NO_MEM;
@@ -356,21 +432,21 @@ static int parse_interface(libusb_context *ctx,
 
 	return parsed;
 err:
-	clear_interface(usb_interface);
+	clear_interface(ctx,usb_interface);
 	return r;
 }
 
-static void clear_configuration(struct libusb_config_descriptor *config)
+static void clear_configuration(libusb_context *ctx, struct libusb_config_descriptor *config)
 {
 	if (config->interface) {
 		int i;
 		for (i = 0; i < config->bNumInterfaces; i++)
-			clear_interface((struct libusb_interface *)
+			clear_interface(ctx,(struct libusb_interface *)
 				config->interface + i);
-		free((void *) config->interface);
+		usbi_free(ctx,(void *) config->interface);
 	}
 	if (config->extra)
-		free((void *) config->extra);
+		usbi_free(ctx,(void *) config->extra);
 }
 
 static int parse_configuration(struct libusb_context *ctx,
@@ -410,7 +486,7 @@ static int parse_configuration(struct libusb_context *ctx,
 	}
 
 	tmp = config->bNumInterfaces * sizeof(struct libusb_interface);
-	usb_interface = malloc(tmp);
+	usb_interface = usbi_calloc(ctx,config->bNumInterfaces,struct libusb_interface);
 	config->interface = usb_interface;
 	if (!config->interface)
 		return LIBUSB_ERROR_NO_MEM;
@@ -464,7 +540,7 @@ static int parse_configuration(struct libusb_context *ctx,
 		if (len) {
 			/* FIXME: We should realloc and append here */
 			if (!config->extra_length) {
-				config->extra = malloc(len);
+				config->extra = usbi_allocz(ctx,len);
 				if (!config->extra) {
 					r = LIBUSB_ERROR_NO_MEM;
 					goto err;
@@ -490,7 +566,7 @@ static int parse_configuration(struct libusb_context *ctx,
 	return size;
 
 err:
-	clear_configuration(config);
+	clear_configuration(ctx,config);
 	return r;
 }
 
@@ -498,7 +574,7 @@ static int raw_desc_to_config(struct libusb_context *ctx,
 	unsigned char *buf, int size, int host_endian,
 	struct libusb_config_descriptor **config)
 {
-	struct libusb_config_descriptor *_config = malloc(sizeof(*_config));
+	struct libusb_config_descriptor *_config = usbi_alloc(ctx,struct libusb_config_descriptor);
 	int r;
 	
 	if (!_config)
@@ -507,7 +583,7 @@ static int raw_desc_to_config(struct libusb_context *ctx,
 	r = parse_configuration(ctx, _config, buf, size, host_endian);
 	if (r < 0) {
 		usbi_err(ctx, "parse_configuration failed with error %d", r);
-		free(_config);
+		usbi_free(ctx,_config);
 		return r;
 	} else if (r > 0) {
 		usbi_warn(ctx, "still %d bytes of descriptor data left", r);
@@ -551,7 +627,7 @@ int usbi_device_cache_descriptor(libusb_device *dev)
 int API_EXPORTED libusb_get_device_descriptor(libusb_device *dev,
 	struct libusb_device_descriptor *desc)
 {
-	usbi_dbg("");
+	usbi_dbg(DEVICE_CTX(dev),"");
 	memcpy((unsigned char *) desc, (unsigned char *) &dev->device_descriptor,
 	       sizeof (dev->device_descriptor));
 	return 0;
@@ -591,7 +667,7 @@ int API_EXPORTED libusb_get_active_config_descriptor(libusb_device *dev,
 	}
 
 	usbi_parse_descriptor(tmp, "bbw", &_config, host_endian);
-	buf = malloc(_config.wTotalLength);
+	buf = usbi_allocz(dev->ctx,_config.wTotalLength);
 	if (!buf)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -644,7 +720,7 @@ int API_EXPORTED libusb_get_config_descriptor(libusb_device *dev,
 	}
 
 	usbi_parse_descriptor(tmp, "bbw", &_config, host_endian);
-	buf = malloc(_config.wTotalLength);
+	buf = usbi_allocz(dev->ctx,_config.wTotalLength);
 	if (!buf)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -733,16 +809,17 @@ int API_EXPORTED libusb_get_config_descriptor_by_value(libusb_device *dev,
  * It is safe to call this function with a NULL config parameter, in which
  * case the function simply returns.
  *
+ * \param dev the device this is a config descriptor for
  * \param config the configuration descriptor to free
  */
-void API_EXPORTED libusb_free_config_descriptor(
+void API_EXPORTED libusb_free_config_descriptor(libusb_device *dev,
 	struct libusb_config_descriptor *config)
 {
 	if (!config)
 		return;
 
-	clear_configuration(config);
-	free(config);
+	clear_configuration(dev->ctx,config);
+	usbi_free(dev->ctx,config);
 }
 
 /** \ingroup desc
@@ -767,6 +844,7 @@ int API_EXPORTED libusb_get_ss_endpoint_companion_descriptor(
 	int size = endpoint->extra_length;
 	const unsigned char *buffer = endpoint->extra;
 
+	USBI_GET_CONTEXT(ctx);
 	*ep_comp = NULL;
 
 	while (size >= DESC_HEADER_LENGTH) {
@@ -786,7 +864,7 @@ int API_EXPORTED libusb_get_ss_endpoint_companion_descriptor(
 				 header.bLength);
 			return LIBUSB_ERROR_IO;
 		}
-		*ep_comp = malloc(sizeof(**ep_comp));
+		*ep_comp = usbi_alloc(ctx,struct libusb_ss_endpoint_companion_descriptor);
 		if (*ep_comp == NULL)
 			return LIBUSB_ERROR_NO_MEM;
 		usbi_parse_descriptor(buffer, "bbbbw", *ep_comp, 0);
@@ -803,18 +881,25 @@ int API_EXPORTED libusb_get_ss_endpoint_companion_descriptor(
  *
  * \param ep_comp the superspeed endpoint companion descriptor to free
  */
-void API_EXPORTED libusb_free_ss_endpoint_companion_descriptor(
+/* NOTE: See my arguments above in the comment for
+   libusb_free_config_descriptor to see why I made the changes I did here.
+
+   -- Stirling Westrup.
+*/   
+void API_EXPORTED libusb_free_ss_endpoint_companion_descriptor(libusb_context *ctx,
 	struct libusb_ss_endpoint_companion_descriptor *ep_comp)
 {
-	free(ep_comp);
+	USBI_GET_CONTEXT(ctx);
+	usbi_free(ctx,ep_comp);
 }
 
-static int parse_bos(struct libusb_context *ctx,
+static int parse_bos(struct libusb_device_handle *handle,
 	struct libusb_bos_descriptor **bos,
 	unsigned char *buffer, int size, int host_endian)
 {
 	struct libusb_bos_descriptor bos_header, *_bos;
 	struct libusb_bos_dev_capability_descriptor dev_cap;
+	libusb_context * ctx = HANDLE_CTX(handle);
 	int i;
 
 	if (size < LIBUSB_DT_BOS_SIZE) {
@@ -839,8 +924,8 @@ static int parse_bos(struct libusb_context *ctx,
 		return LIBUSB_ERROR_IO;
 	}
 
-	_bos = calloc (1,
-		sizeof(*_bos) + bos_header.bNumDeviceCaps * sizeof(void *));
+	_bos = usbi_hcalloc(ctx,struct libusb_bos_descriptor,bos_header.bNumDeviceCaps,void *);
+	
 	if (!_bos)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -864,7 +949,7 @@ static int parse_bos(struct libusb_context *ctx,
 		if (dev_cap.bLength < LIBUSB_DT_DEVICE_CAPABILITY_SIZE) {
 			usbi_err(ctx, "invalid dev-cap bLength (%d)",
 				 dev_cap.bLength);
-			libusb_free_bos_descriptor(_bos);
+			libusb_free_bos_descriptor(handle,_bos);
 			return LIBUSB_ERROR_IO;
 		}
 		if (dev_cap.bLength > size) {
@@ -873,9 +958,9 @@ static int parse_bos(struct libusb_context *ctx,
 			break;
 		}
 
-		_bos->dev_capability[i] = malloc(dev_cap.bLength);
+		_bos->dev_capability[i] = usbi_allocz(ctx,dev_cap.bLength);
 		if (!_bos->dev_capability[i]) {
-			libusb_free_bos_descriptor(_bos);
+			libusb_free_bos_descriptor(handle,_bos);
 			return LIBUSB_ERROR_NO_MEM;
 		}
 		memcpy(_bos->dev_capability[i], buffer, dev_cap.bLength);
@@ -924,20 +1009,21 @@ int API_EXPORTED libusb_get_bos_descriptor(libusb_device_handle *handle,
 	}
 
 	usbi_parse_descriptor(bos_header, "bbwb", &_bos, host_endian);
-	usbi_dbg("found BOS descriptor: size %d bytes, %d capabilities",
+	usbi_dbg(handle->dev->ctx, "found BOS descriptor: size %d bytes, %d capabilities",
 		 _bos.wTotalLength, _bos.bNumDeviceCaps);
-	bos_data = calloc(_bos.wTotalLength, 1);
+	bos_data = usbi_allocz(handle->dev->ctx,_bos.wTotalLength);
 	if (bos_data == NULL)
 		return LIBUSB_ERROR_NO_MEM;
+	memset(bos_data,0,_bos.wTotalLength);
 
 	r = libusb_get_descriptor(handle, LIBUSB_DT_BOS, 0, bos_data,
 				  _bos.wTotalLength);
 	if (r >= 0)
-		r = parse_bos(handle->dev->ctx, bos, bos_data, r, host_endian);
+		r = parse_bos(handle, bos, bos_data, r, host_endian);
 	else
 		usbi_err(handle->dev->ctx, "failed to read BOS (%d)", r);
 
-	free(bos_data);
+	usbi_free(handle->dev->ctx,bos_data);
 	return r;
 }
 
@@ -948,7 +1034,7 @@ int API_EXPORTED libusb_get_bos_descriptor(libusb_device_handle *handle,
  *
  * \param bos the BOS descriptor to free
  */
-void API_EXPORTED libusb_free_bos_descriptor(struct libusb_bos_descriptor *bos)
+void API_EXPORTED libusb_free_bos_descriptor(libusb_device_handle *handle, struct libusb_bos_descriptor *bos)
 {
 	int i;
 
@@ -956,8 +1042,8 @@ void API_EXPORTED libusb_free_bos_descriptor(struct libusb_bos_descriptor *bos)
 		return;
 
 	for (i = 0; i < bos->bNumDeviceCaps; i++)
-		free(bos->dev_capability[i]);
-	free(bos);
+		usbi_free(handle->dev->ctx,bos->dev_capability[i]);
+	usbi_free(handle->dev->ctx,bos);
 }
 
 /** \ingroup desc
@@ -981,6 +1067,8 @@ int API_EXPORTED libusb_get_usb_2_0_extension_descriptor(
 	struct libusb_usb_2_0_extension_descriptor *_usb_2_0_extension;
 	const int host_endian = 0;
 
+	USBI_GET_CONTEXT(ctx);
+
 	if (dev_cap->bDevCapabilityType != LIBUSB_BT_USB_2_0_EXTENSION) {
 		usbi_err(ctx, "unexpected bDevCapabilityType %x (expected %x)",
 			 dev_cap->bDevCapabilityType,
@@ -993,7 +1081,7 @@ int API_EXPORTED libusb_get_usb_2_0_extension_descriptor(
 		return LIBUSB_ERROR_IO;
 	}
 
-	_usb_2_0_extension = malloc(sizeof(*_usb_2_0_extension));
+	_usb_2_0_extension = usbi_alloc(ctx,struct libusb_usb_2_0_extension_descriptor);
 	if (!_usb_2_0_extension)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -1010,12 +1098,15 @@ int API_EXPORTED libusb_get_usb_2_0_extension_descriptor(
  * It is safe to call this function with a NULL usb_2_0_extension parameter,
  * in which case the function simply returns.
  *
+ * \param ctx libusb context used to allocate the extension descriptor
  * \param usb_2_0_extension the USB 2.0 Extension descriptor to free
  */
-void API_EXPORTED libusb_free_usb_2_0_extension_descriptor(
+
+void API_EXPORTED libusb_free_usb_2_0_extension_descriptor(libusb_context *ctx,
 	struct libusb_usb_2_0_extension_descriptor *usb_2_0_extension)
 {
-	free(usb_2_0_extension);
+	USBI_GET_CONTEXT(ctx);
+	usbi_free(ctx,usb_2_0_extension);
 }
 
 /** \ingroup desc
@@ -1039,6 +1130,7 @@ int API_EXPORTED libusb_get_ss_usb_device_capability_descriptor(
 	struct libusb_ss_usb_device_capability_descriptor *_ss_usb_device_cap;
 	const int host_endian = 0;
 
+	USBI_GET_CONTEXT(ctx);
 	if (dev_cap->bDevCapabilityType != LIBUSB_BT_SS_USB_DEVICE_CAPABILITY) {
 		usbi_err(ctx, "unexpected bDevCapabilityType %x (expected %x)",
 			 dev_cap->bDevCapabilityType,
@@ -1051,7 +1143,7 @@ int API_EXPORTED libusb_get_ss_usb_device_capability_descriptor(
 		return LIBUSB_ERROR_IO;
 	}
 
-	_ss_usb_device_cap = malloc(sizeof(*_ss_usb_device_cap));
+	_ss_usb_device_cap = usbi_alloc(ctx,struct libusb_ss_usb_device_capability_descriptor);
 	if (!_ss_usb_device_cap)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -1070,10 +1162,11 @@ int API_EXPORTED libusb_get_ss_usb_device_capability_descriptor(
  *
  * \param ss_usb_device_cap the USB 2.0 Extension descriptor to free
  */
-void API_EXPORTED libusb_free_ss_usb_device_capability_descriptor(
+void API_EXPORTED libusb_free_ss_usb_device_capability_descriptor(libusb_context *ctx,
 	struct libusb_ss_usb_device_capability_descriptor *ss_usb_device_cap)
 {
-	free(ss_usb_device_cap);
+	USBI_GET_CONTEXT(ctx);
+	usbi_free(ctx,ss_usb_device_cap);
 }
 
 /** \ingroup desc
@@ -1096,6 +1189,7 @@ int API_EXPORTED libusb_get_container_id_descriptor(struct libusb_context *ctx,
 	struct libusb_container_id_descriptor *_container_id;
 	const int host_endian = 0;
 
+	USBI_GET_CONTEXT(ctx);
 	if (dev_cap->bDevCapabilityType != LIBUSB_BT_CONTAINER_ID) {
 		usbi_err(ctx, "unexpected bDevCapabilityType %x (expected %x)",
 			 dev_cap->bDevCapabilityType,
@@ -1108,7 +1202,7 @@ int API_EXPORTED libusb_get_container_id_descriptor(struct libusb_context *ctx,
 		return LIBUSB_ERROR_IO;
 	}
 
-	_container_id = malloc(sizeof(*_container_id));
+	_container_id = usbi_alloc(ctx,struct libusb_container_id_descriptor);
 	if (!_container_id)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -1127,10 +1221,11 @@ int API_EXPORTED libusb_get_container_id_descriptor(struct libusb_context *ctx,
  *
  * \param container_id the USB 2.0 Extension descriptor to free
  */
-void API_EXPORTED libusb_free_container_id_descriptor(
+void API_EXPORTED libusb_free_container_id_descriptor(libusb_context *ctx,
 	struct libusb_container_id_descriptor *container_id)
 {
-	free(container_id);
+	USBI_GET_CONTEXT(ctx);
+	usbi_free(ctx,container_id);
 }
 
 /** \ingroup desc

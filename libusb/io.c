@@ -35,8 +35,10 @@
 #include <sys/timerfd.h>
 #endif
 
-#include "libusbi.h"
+#include "allocatori.h"
 #include "hotplug.h"
+#include "libusbi.h"
+#include "loggeri.h"
 
 /**
  * \page io Synchronous and asynchronous device I/O
@@ -790,7 +792,7 @@ void myfunc() {
 	unsigned char buffer[LIBUSB_CONTROL_SETUP_SIZE];
 	int completed = 0;
 
-	transfer = libusb_alloc_transfer(0);
+	transfer = libusb_alloc_transfer(0,NULL);
 	libusb_fill_control_setup(buffer,
 		LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_OUT, 0x04, 0x01, 0, 0);
 	libusb_fill_control_transfer(transfer, dev, buffer, cb, &completed, 1000);
@@ -1281,7 +1283,7 @@ out:
 		 * rearm the timerfd with this transfer's timeout */
 		const struct itimerspec it = { {0, 0},
 			{ timeout->tv_sec, timeout->tv_usec * 1000 } };
-		usbi_dbg("arm timerfd for timeout in %dms (first in line)",
+		usbi_dbg(ctx,"arm timerfd for timeout in %dms (first in line)",
 			USBI_TRANSFER_TO_LIBUSB_TRANSFER(transfer)->timeout);
 		r = timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &it, NULL);
 		if (r < 0) {
@@ -1316,12 +1318,20 @@ out:
  * use it on a non-isochronous endpoint. If you do this, ensure that at time
  * of submission, num_iso_packets is 0 and that type is set appropriately.
  *
+ * Because it is often desireable to have a common memory pool from which to
+ * allocate transfer buffers, which may or may not be separate from memory
+ * pools used for other purposes, this function accepts an optional
+ * libusb_allocator * as its second parameter. That parameter will *only* be
+ * used for allocating and freeing transfer buffers. Leave that parameter NULL
+ * in order use the default libusb allocator.
+ *
  * \param iso_packets number of isochronous packet descriptors to allocate
+ * \param alloc optional libusb_allocator * to use to allocate the transfer.
  * \returns a newly allocated transfer, or NULL on error
  */
 DEFAULT_VISIBILITY
 struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(
-	int iso_packets)
+	int iso_packets, libusb_allocator *alloc)
 {
 	size_t os_alloc_size = usbi_backend->transfer_priv_size
 		+ (usbi_backend->add_iso_packet_size * iso_packets);
@@ -1329,11 +1339,16 @@ struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(
 		+ sizeof(struct libusb_transfer)
 		+ (sizeof(struct libusb_iso_packet_descriptor) * iso_packets)
 		+ os_alloc_size;
-	struct usbi_transfer *itransfer = calloc(1, alloc_size);
+
+	if(!alloc)
+		alloc = libusb_default_allocator;
+	struct usbi_transfer *itransfer = usbi_raw_allocz(alloc,"transfer buffer",alloc_size);
 	if (!itransfer)
 		return NULL;
+	memset(itransfer,0,alloc_size);
 
 	itransfer->num_iso_packets = iso_packets;
+	itransfer->allocator = alloc;
 	usbi_mutex_init(&itransfer->lock, NULL);
 	return USBI_TRANSFER_TO_LIBUSB_TRANSFER(itransfer);
 }
@@ -1361,12 +1376,18 @@ void API_EXPORTED libusb_free_transfer(struct libusb_transfer *transfer)
 	if (!transfer)
 		return;
 
-	if (transfer->flags & LIBUSB_TRANSFER_FREE_BUFFER && transfer->buffer)
-		free(transfer->buffer);
-
 	itransfer = LIBUSB_TRANSFER_TO_USBI_TRANSFER(transfer);
+
+	if (transfer->flags & LIBUSB_TRANSFER_FREE_BUFFER && transfer->buffer)
+		{
+			if( transfer->flags & LIBUSB_TRANSFER_BUFFER_FROM_TRANSFER_POOL )
+				usbi_raw_free(itransfer->allocator,transfer->buffer);
+			else
+				usbi_free(HANDLE_CTX(transfer->dev_handle),transfer->buffer);
+		}
+
 	usbi_mutex_destroy(&itransfer->lock);
-	free(itransfer);
+	usbi_raw_free(itransfer->allocator,itransfer);
 }
 
 #ifdef USBI_TIMERFD_AVAILABLE
@@ -1375,7 +1396,7 @@ static int disarm_timerfd(struct libusb_context *ctx)
 	const struct itimerspec disarm_timer = { { 0, 0 }, { 0, 0 } };
 	int r;
 
-	usbi_dbg("");
+	usbi_dbg(ctx,"");
 	r = timerfd_settime(ctx->timerfd, 0, &disarm_timer, NULL);
 	if (r < 0)
 		return LIBUSB_ERROR_OTHER;
@@ -1406,7 +1427,7 @@ static int arm_timerfd_for_next_timeout(struct libusb_context *ctx)
 			int r;
 			const struct itimerspec it = { {0, 0},
 				{ cur_tv->tv_sec, cur_tv->tv_usec * 1000 } };
-			usbi_dbg("next timeout originally %dms", USBI_TRANSFER_TO_LIBUSB_TRANSFER(transfer)->timeout);
+			usbi_dbg(ctx,"next timeout originally %dms", USBI_TRANSFER_TO_LIBUSB_TRANSFER(transfer)->timeout);
 			r = timerfd_settime(ctx->timerfd, TFD_TIMER_ABSTIME, &it, NULL);
 			if (r < 0)
 				return LIBUSB_ERROR_OTHER;
@@ -1624,7 +1645,7 @@ int API_EXPORTED libusb_try_lock_events(libusb_context *ctx)
 	ru = ctx->pollfd_modify;
 	usbi_mutex_unlock(&ctx->pollfd_modify_lock);
 	if (ru) {
-		usbi_dbg("someone else is modifying poll fds");
+		usbi_dbg(ctx,"someone else is modifying poll fds");
 		return 1;
 	}
 
@@ -1973,13 +1994,13 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 	r = usbi_poll(fds, nfds, timeout_ms);
 	usbi_dbg("poll() returned %d", r);
 	if (r == 0) {
-		free(fds);
+		usbi_free(ctx,fds);
 		return handle_timeouts(ctx);
 	} else if (r == -1 && errno == EINTR) {
-		free(fds);
+		usbi_free(ctx,fds);
 		return LIBUSB_ERROR_INTERRUPTED;
 	} else if (r < 0) {
-		free(fds);
+		usbi_free(ctx,fds);
 		usbi_err(ctx, "poll failed %d err=%d\n", r, errno);
 		return LIBUSB_ERROR_IO;
 	}
@@ -2006,7 +2027,7 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 		libusb_hotplug_message message;
 		ssize_t ret;
 
-		usbi_dbg("caught a fish on the hotplug pipe");
+		usbi_dbg(ctx,"caught a fish on the hotplug pipe");
 
 		/* read the message from the hotplug thread */
 		ret = usbi_read(ctx->hotplug_pipe[0], &message, sizeof (message));
@@ -2058,7 +2079,7 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 		usbi_err(ctx, "backend handle_events failed with error %d", r);
 
 handled:
-	free(fds);
+	usbi_free(ctx,fds);
 	return r;
 }
 
@@ -2431,7 +2452,7 @@ void API_EXPORTED libusb_set_pollfd_notifiers(libusb_context *ctx,
  * POLLIN and/or POLLOUT. */
 int usbi_add_pollfd(struct libusb_context *ctx, int fd, short events)
 {
-	struct usbi_pollfd *ipollfd = malloc(sizeof(*ipollfd));
+	struct usbi_pollfd *ipollfd = usbi_alloc(ctx,struct usbi_pollfd);
 	if (!ipollfd)
 		return LIBUSB_ERROR_NO_MEM;
 
@@ -2469,7 +2490,7 @@ void usbi_remove_pollfd(struct libusb_context *ctx, int fd)
 
 	list_del(&ipollfd->list);
 	usbi_mutex_unlock(&ctx->pollfds_lock);
-	free(ipollfd);
+	usbi_free(ctx,ipollfd);
 	if (ctx->fd_removed_cb)
 		ctx->fd_removed_cb(fd, ctx->fd_cb_user_data);
 }
@@ -2504,7 +2525,7 @@ const struct libusb_pollfd ** LIBUSB_CALL libusb_get_pollfds(
 	list_for_each_entry(ipollfd, &ctx->pollfds, list, struct usbi_pollfd)
 		cnt++;
 
-	ret = calloc(cnt + 1, sizeof(struct libusb_pollfd *));
+	ret = usbi_calloc(ctx,cnt + 1, struct libusb_pollfd *);
 	if (!ret)
 		goto out;
 
@@ -2570,7 +2591,7 @@ void usbi_handle_disconnect(struct libusb_device_handle *handle)
 		if (!to_cancel)
 			break;
 
-		usbi_dbg("cancelling transfer %p from disconnect",
+		usbi_dbg(HANDLE_CTX(handle),"cancelling transfer %p from disconnect",
 			 USBI_TRANSFER_TO_LIBUSB_TRANSFER(to_cancel));
 
 		usbi_backend->clear_transfer_priv(to_cancel);
