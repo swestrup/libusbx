@@ -28,15 +28,6 @@
   #undef strdup
 #endif
 
-#define free FREEX
-#define malloc MALLOCX
-#define calloc CALLOCX
-#define realloc REALLOCX
-#define strdup STRDUPX
-#define vasprintf VASPRINTFX
-#define asprintf ASPRINTFX
-
-
 
 #ifdef _MSC_VER
 /* on MS environments, the inline keyword is available in C++ only */

@@ -110,18 +110,18 @@
  *
  *	 to invalidate a pointer while freeing the memory it points to.
  */
-typedef void * libusb_allocator_allocate_fn
-  ( void *       pool
-  , char const * label
-  , char const * file
-  , char const * func
-  , long	 line
-  , double	 stamp
-  , void       * mem
-  , size_t       head
-  , ulong	 count
-  , size_t       size
-  );
+typedef void * libusb_allocator_allocate_fn(
+	void		* pool,
+	char const	* label,
+	char const	* file,
+	char const	* func,
+	long	          line,
+	double	          stamp,
+	void		* mem,
+	size_t            head,
+	unsigned long	  count,
+	size_t		  size
+);
 
 /** \ingroup alloc
  *
@@ -144,7 +144,6 @@ typedef void * libusb_allocator_allocate_fn
  * function. This allows for data to be accumulated and passed on during the
  * operation of the visitation function.
  *
- * \param[in] pool a user-defined memory pool or other allocation context
  * \param[in] walkinfo the previous output of the last call to this function.
  * \param[in] label arbitrary label (often a type name) of this memory
  * \param[in] file file name in which allocation request originated
@@ -158,18 +157,18 @@ typedef void * libusb_allocator_allocate_fn
  * this function.
  *
  */
-typedef void * libusb_allocator_visit_fn
-  ( void *       pool
-  , void *       walkinfo
-  , char const * label
-  , char const * file
-  , char const * func
-  , long	 line
-  , double       stamp
-  , void *       mem
-  , size_t       size
-  , ulong	 count
-  );
+typedef void * libusb_allocator_visit_fn(
+	void            * walkinfo,
+	char const      * label,
+	char const      * file,
+	char const      * func,
+	long	          line,
+	double            stamp,
+	void		* mem,
+	size_t	          head,
+	unsigned long	  count,
+	size_t            size
+);
 
 /** \ingroup alloc
  *
@@ -194,11 +193,11 @@ typedef void * libusb_allocator_visit_fn
  * visit function.
  *
  */
-typedef void * libusb_allocator_walk_fn
-  ( void		      * pool
-  , void		      * walkinfo
-  , libusb_allocator_visit_fn * visit
-  );
+typedef void * libusb_allocator_walk_fn(
+	void		      		* pool,
+	void		      		* walkinfo,
+	libusb_allocator_visit_fn	* visit
+);
 
 
 /** \ingroup alloc
@@ -221,9 +220,8 @@ typedef struct libusb_allocator {
     libusb_allocator_allocate_fn * allocate;
 
     /** An optional memory inspection function */
-    libusb_allocator_walk_fn     * walk;	  // memory inspection func
-  }
-libusb_allocator;
+    libusb_allocator_walk_fn     * walk;
+} libusb_allocator;
 
 
 #endif

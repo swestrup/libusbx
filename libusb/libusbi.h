@@ -39,6 +39,53 @@
 #include "libusb.h"
 #include "version.h"
 
+/* Here we define a bunch of macros to help catch any attempt to bypass use of
+   the allocation plugin.
+*/
+#if defined(free)
+#undef free
+#endif
+
+#if defined(malloc)
+#undef malloc
+#endif
+
+#if defined(calloc)
+#undef calloc
+#endif
+
+#if defined(realloc)
+#undef realloc
+#endif
+
+#if defined(strdup)
+#undef strdup
+#endif
+
+#if defined(strndup)
+#undef strndup
+#endif
+
+#if defined(asnprintf)
+#undef asnprintf
+#endif
+
+#if defined(vasnprintf)
+#undef vasnprintf
+#endif
+
+#define USBI_PASTE(a,b) a ## b
+#define USBI_NOT_ALLOWED(x) USBI_PASTE(x,_IS_NOT_ALLOWED_SEE_ALLOCATORI_DOT_H)
+#define free      USBI_NOT_ALLOWED(FREE)
+#define malloc    USBI_NOT_ALLOWED(MALLOC)
+#define calloc    USBI_NOT_ALLOWED(CALLOC)
+#define realloc   USBI_NOT_ALLOWED(REALLOC)
+#define strdup    USBI_NOT_ALLOWED(STRDUP)
+#define strndup   USBI_NOT_ALLOWED(STRNDUP)
+#define asprintf  USBI_NOT_ALLOWED(ASPRINTF)
+#define vasprintf USBI_NOT_ALLOWED(VASPRINTF)
+
+
 /* Inside the libusbx code, mark all public functions as follows:
  *   return_type API_EXPORTED function_name(params) { ... }
  * But if the function returns a pointer, mark it as follows:

@@ -22,6 +22,7 @@
 
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "libusb.h"
@@ -42,6 +43,28 @@
 #endif
 
 extern libusb_allocator * libusb_default_allocator;
+
+static inline int usbi_allocator_vasprintf(
+	libusb_allocator         * allocator,
+	char const	         * label,
+	char const	         * file,
+	char const	         * func,
+	long		           line,
+	char			** bufp,
+	const char	         * format,
+	va_list			   args
+) GCC_PRINTF(7,0);
+
+static inline int usbi_allocator_asprintf(
+	libusb_allocator         * allocator,
+	char const	         * label,
+	char const	         * file,
+	char const	         * func,
+	long		           line,
+	char			** bufp,
+	const char	         * format,
+	...
+) GCC_PRINTF(7,8);
 
 // This function make calls through an Allocator to implement the current
 // memory allocation policy. It is intended to be called through macros
@@ -100,29 +123,53 @@ static inline void *usbi_allocator_reallocf(
 	return ret;
 }	
 
-int usbi_allocator_vasprintf
-  ( libusb_allocator *  allocator
-  , char const	     *  label
-  , char const	     *  file
-  , char const	     *  func
-  , long		line
-  , char	     ** bufp
-  , const char       *  format
-  , va_list		args
-  )
-GCC_PRINTF(7,0);
+static inline int usbi_allocator_vasprintf(
+	libusb_allocator         * allocator,
+	char const	         * label,
+	char const	         * file,
+	char const	         * func,
+	long		           line,
+	char			** bufp,
+	const char	         * format,
+	va_list			   args
+)
+{
+	va_list	 		   argsc;
 
-int usbi_allocator_asprintf
-  ( libusb_allocator *  allocator
-  , char const	     *  label
-  , char const	     *  file
-  , char const	     *  func
-  , long		line
-  , char	     ** bufp
-  , const char	     *  format
-  , ...
-  )
-GCC_PRINTF(7,8);
+	va_copy(argsc, args);
+	int len = vsnprintf(NULL, 0, format, argsc) + 1;
+	va_end(argsc);
+
+	char *p = usbi_allocator_allocate(allocator, label, file, func, line,
+		NULL,0,len,sizeof(char));
+	if (!p)
+	  return -1;
+
+	*bufp = p;
+	return vsnprintf(p, len, format, args);
+}
+
+
+static inline int usbi_allocator_asprintf(
+	libusb_allocator         * allocator,
+	char const	         * label,
+	char const	         * file,
+	char const	         * func,
+	long		           line,
+	char			** bufp,
+	const char	         * format,
+	...
+)
+{
+	va_list			   args;
+
+	va_start(args, format);
+	int ret = usbi_allocator_vasprintf(allocator, label, file, func, line,
+		bufp, format, args);
+	va_end(args);
+	return ret;
+}
+	  
 
 char *usbi_allocator_strdup
   ( libusb_allocator * allocator
