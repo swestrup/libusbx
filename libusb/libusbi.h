@@ -606,7 +606,7 @@ struct usbi_os_backend {
 	 *
 	 * Optional, should be implemented by backends with hotplug support.
 	 */
-	void (*hotplug_poll)(void);
+	void (*hotplug_poll)(libusb_context *ctx);
 
 	/* Open a device for I/O and other USB operations. The device handle
 	 * is preallocated for you, you can retrieve the device in question

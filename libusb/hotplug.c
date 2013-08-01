@@ -32,6 +32,8 @@
 
 #include "libusbi.h"
 #include "hotplug.h"
+#include "allocatori.h"
+#include "loggeri.h"
 
 /**
  * @defgroup hotplug  Device hotplug event notification
@@ -185,7 +187,7 @@ void usbi_hotplug_match(struct libusb_context *ctx, struct libusb_device *dev,
 
 		if (ret) {
 			list_del(&hotplug_cb->list);
-			free(hotplug_cb);
+			usbi_free(ctx,hotplug_cb);
 		}
 	}
 
@@ -218,10 +220,11 @@ int API_EXPORTED libusb_hotplug_register_callback(libusb_context *ctx,
 
 	USBI_GET_CONTEXT(ctx);
 
-	new_callback = (libusb_hotplug_callback *)calloc(1, sizeof (*new_callback));
+	new_callback = usbi_alloc(ctx,libusb_hotplug_callback);
 	if (!new_callback) {
 		return LIBUSB_ERROR_NO_MEM;
 	}
+	memset(new_callback,0,sizeof(libusb_hotplug_callback));
 
 	new_callback->ctx = ctx;
 	new_callback->vendor_id = vendor_id;
@@ -301,7 +304,7 @@ void usbi_hotplug_deregister_all(struct libusb_context *ctx) {
 	list_for_each_entry_safe(hotplug_cb, next, &ctx->hotplug_cbs, list,
 				 struct libusb_hotplug_callback) {
 		list_del(&hotplug_cb->list);
-		free(hotplug_cb);
+		usbi_free(ctx,hotplug_cb);
 	}
 
 	usbi_mutex_unlock(&ctx->hotplug_cbs_lock);

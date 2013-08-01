@@ -70,6 +70,9 @@ static void sync_transfer_wait_for_completion(struct libusb_transfer *transfer)
  * The wValue, wIndex and wLength fields values should be given in host-endian
  * byte order.
  *
+ * The internally-used libusb_transfer and its buffer will be allocated and
+ * freed by the allocator associated with the device handle.
+ *
  * \param dev_handle a handle for the device to communicate with
  * \param bmRequestType the request type field for the setup packet
  * \param bRequest the request field for the setup packet
@@ -82,7 +85,6 @@ static void sync_transfer_wait_for_completion(struct libusb_transfer *transfer)
  * \param timeout timeout (in millseconds) that this function should wait
  * before giving up due to no response being received. For an unlimited
  * timeout, use value 0.
- * \param alloc optional alternative allocator to use, or NULL
  * \returns on success, the number of bytes actually transferred
  * \returns LIBUSB_ERROR_TIMEOUT if the transfer timed out
  * \returns LIBUSB_ERROR_PIPE if the control request was not supported by the
@@ -92,18 +94,19 @@ static void sync_transfer_wait_for_completion(struct libusb_transfer *transfer)
  */
 int API_EXPORTED libusb_control_transfer(libusb_device_handle *dev_handle,
 	uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
-	unsigned char *data, uint16_t wLength, unsigned int timeout,
-	libusb_allocator *alloc)
+	unsigned char *data, uint16_t wLength, unsigned int timeout)
 {
-	struct libusb_transfer *transfer = libusb_alloc_transfer(0,alloc);
 	unsigned char *buffer;
 	int completed = 0;
 	int r;
 
+	libusb_context * ctx = HANDLE_CTX(dev_handle);
+	struct libusb_transfer *transfer = libusb_alloc_transfer(0,ctx->allocator);
+
 	if (!transfer)
 		return LIBUSB_ERROR_NO_MEM;
 
-	buffer = (unsigned char*) malloc(LIBUSB_CONTROL_SETUP_SIZE + wLength);
+	buffer = usbi_allocz(ctx, LIBUSB_CONTROL_SETUP_SIZE + wLength);
 	if (!buffer) {
 		libusb_free_transfer(transfer);
 		return LIBUSB_ERROR_NO_MEM;
@@ -163,7 +166,8 @@ static int do_sync_bulk_transfer(struct libusb_device_handle *dev_handle,
 	unsigned char endpoint, unsigned char *buffer, int length,
 	int *transferred, unsigned int timeout, unsigned char type)
 {
-	struct libusb_transfer *transfer = libusb_alloc_transfer(0);
+	struct libusb_context  *ctx = HANDLE_CTX(dev_handle);  
+	struct libusb_transfer *transfer = libusb_alloc_transfer(0,ctx->allocator);
 	int completed = 0;
 	int r;
 
@@ -232,6 +236,9 @@ static int do_sync_bulk_transfer(struct libusb_device_handle *dev_handle,
  * that may have been transferred; do not assume that timeout conditions
  * indicate a complete lack of I/O.
  *
+ * The internally-used libusb_transfer and its buffer will be allocated and
+ * freed by the allocator associated with the device handle.
+ *
  * \param dev_handle a handle for the device to communicate with
  * \param endpoint the address of a valid endpoint to communicate with
  * \param data a suitably-sized data buffer for either input or output
@@ -281,6 +288,9 @@ int API_EXPORTED libusb_bulk_transfer(struct libusb_device_handle *dev_handle,
  * indicate a complete lack of I/O.
  *
  * The default endpoint bInterval value is used as the polling interval.
+ *
+ * The internally-used libusb_transfer and its buffer will be allocated and
+ * freed by the allocator associated with the device handle.
  *
  * \param dev_handle a handle for the device to communicate with
  * \param endpoint the address of a valid endpoint to communicate with

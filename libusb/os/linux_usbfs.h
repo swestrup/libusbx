@@ -159,14 +159,14 @@ struct usbfs_disconnect_claim {
 extern usbi_mutex_static_t linux_hotplug_lock;
 
 #if defined(HAVE_LIBUDEV)
-int linux_udev_start_event_monitor(void);
+int linux_udev_start_event_monitor(libusb_context *ctx);
 int linux_udev_stop_event_monitor(void);
-int linux_udev_scan_devices(struct libusb_context *ctx);
-void linux_udev_hotplug_poll(void);
+int linux_udev_scan_devices(libusb_context *ctx);
+void linux_udev_hotplug_poll(libusb_context *ctx);
 #else
-int linux_netlink_start_event_monitor(void);
+int linux_netlink_start_event_monitor(libusb_context *ctx);
 int linux_netlink_stop_event_monitor(void);
-void linux_netlink_hotplug_poll(void);
+void linux_netlink_hotplug_poll(libusb_context *ctx);
 #endif
 
 void linux_hotplug_enumerate(uint8_t busnum, uint8_t devaddr, const char *sys_name);

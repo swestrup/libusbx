@@ -1121,7 +1121,7 @@ int usbi_io_init(struct libusb_context *ctx)
 	list_init(&ctx->pollfds);
 
 	/* FIXME should use an eventfd on kernels that support it */
-	r = usbi_pipe(ctx->ctrl_pipe);
+	r = usbi_pipe(ctx,ctx->ctrl_pipe);
 	if (r < 0) {
 		r = LIBUSB_ERROR_OTHER;
 		goto err;
@@ -1132,7 +1132,7 @@ int usbi_io_init(struct libusb_context *ctx)
 		goto err_close_pipe;
 
 	/* create hotplug pipe */
-	r = usbi_pipe(ctx->hotplug_pipe);
+	r = usbi_pipe(ctx,ctx->hotplug_pipe);
 	if (r < 0) {
 		r = LIBUSB_ERROR_OTHER;
 		goto err;

@@ -34,7 +34,7 @@ extern libusb_logger * libusb_default_logger;
 
 // Acquire any needed locks on and/or open any required output streams, and
 // output any initial header info for a log entry.
-inline void libusb_logger_entry_begin(
+static inline void libusb_logger_entry_begin(
 	libusb_logger    * logger,
 	libusb_log_level   level,
 	char const       * file,
@@ -48,7 +48,7 @@ inline void libusb_logger_entry_begin(
 // Output some or all of the data for a log entry. This function can be called
 // multiple times between the _begin and _end functions to output multiple
 // pieces of data.
-inline void libusb_logger_entry_extend_v(
+static inline void libusb_logger_entry_extend_v(
 	libusb_logger * logger,
 	char const    * format,
 	va_list	        args
@@ -60,7 +60,7 @@ inline void libusb_logger_entry_extend_v(
 // Output some or all of the data for a log entry. This function can be called
 // multiple times between the _begin and _end functions to output multiple
 // pieces of data. 
-inline void libusb_logger_entry_extend(
+static inline void libusb_logger_entry_extend(
 	libusb_logger * logger,
 	char const    * format,
 	...
@@ -75,23 +75,23 @@ inline void libusb_logger_entry_extend(
 
 // Output any trailing log entry info, and optionally flush and close streams
 // and release any output serialization locks.
-inline void libusb_logger_entry_end(libusb_logger* logger)
+static inline void libusb_logger_entry_end(libusb_logger* logger)
 {
 	logger->end(logger->data);
 }
 
-inline void libusb_logger_set_level(libusb_logger* logger, libusb_log_level level)
+static inline void libusb_logger_set_level(libusb_logger* logger, libusb_log_level level)
 {
 	logger->set_level(logger->data,level);
 }	
 
-inline libusb_log_level libusb_logger_get_level(libusb_logger* logger)
+static inline libusb_log_level libusb_logger_get_level(libusb_logger* logger)
 {
 	return logger->get_level(logger->data);
 }	
 
 
-inline void _usbi_log_v(
+static inline void _usbi_log_v(
 	struct libusb_context * ctx,
 	enum libusb_log_level   level,
 	const char            * file,
@@ -108,7 +108,7 @@ inline void _usbi_log_v(
 	libusb_logger_entry_end(logger);
 }
 
-inline void _usbi_log(
+static inline void _usbi_log(
 	struct libusb_context * ctx,
 	enum libusb_log_level   level,
 	const char            * file,
@@ -125,7 +125,7 @@ inline void _usbi_log(
 	va_end(args);
 }
 
-inline void _usbi_trc(
+static inline void _usbi_trc(
 	struct libusb_context * ctx,
 	enum libusb_log_level   level,
 	const char            * file,

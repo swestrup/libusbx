@@ -49,3 +49,4 @@ Release
 .libs
 *.o
 *.lo
+*.la

@@ -6,6 +6,6 @@
 #define usbi_close close
 #define usbi_poll poll
 
-int usbi_pipe(int pipefd[2]);
+int usbi_pipe(libusb_context *ctx,int pipefd[2]);
 
 #endif /* LIBUSB_POLL_POSIX_H */
