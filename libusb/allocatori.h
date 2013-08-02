@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "libusb.h"
 #include "libusbi.h"
@@ -171,14 +172,49 @@ static inline int usbi_allocator_asprintf(
 }
 	  
 
-char *usbi_allocator_strdup
-  ( libusb_allocator * allocator
-  , char const	     * label
-  , char const	     * file
-  , char const	     * func
-  , long	       line
-  , char const	     * str
-  );
+static inline char *usbi_allocator_strdup(
+	libusb_allocator	* allocator,
+	char const	        * label,
+	char const	        * file,
+	char const	        * func,
+	long	       		  line,
+	char const	        * str
+)
+{
+	size_t size = strlen(str)+1;
+	char * ret = usbi_allocator_allocate(allocator, label, file, func, line,
+		NULL, 0, size, sizeof(char));
+
+	if( ret )
+		strcpy(ret,str);
+	return ret;
+}	
+	
+static inline char *usbi_allocator_strndup(
+	libusb_allocator	* allocator,
+	char const	        * label,
+	char const	        * file,
+	char const	        * func,
+	long	       		  line,
+	char const	        * str,
+	size_t			  len
+)
+{
+	size_t size;
+	
+	for( size = 0; size < len; size++ )
+		if( str[size] == '\0' )
+			break;
+	char * ret = usbi_allocator_allocate(allocator, label, file, func, line,
+		NULL, 0, size+1, sizeof(char));
+
+	if( ret ) {
+		strncpy(ret,str,size);
+		ret[size] = '\0';
+	}
+	return ret;
+}	
+	
 
 // Label generation macros
 #define _USBI_LBL1(n,t)    t "[" #n "]"
@@ -264,6 +300,15 @@ char *usbi_allocator_strdup
     , "strdup(" #str ")"			\
     , __FILE__, __FUNCTION__, __LINE__		\
     , str					\
+    )
+
+// Allocate and return up to n characters of a string.
+#define usbi_strndup(ctx,str,n)			\
+  usbi_allocator_strdup			        \
+    ( libusb_context_get_allocator(ctx)		\
+    , "strndup(" #str "," #n ")"		\
+    , __FILE__, __FUNCTION__, __LINE__		\
+    , str, n					\
     )
 
 // Allocate an object by type.
