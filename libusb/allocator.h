@@ -224,4 +224,7 @@ typedef struct libusb_allocator {
 } libusb_allocator;
 
 
+libusb_allocator * LIBUSB_CALL libusb_get_allocator(libusb_context *ctx);
+
+
 #endif

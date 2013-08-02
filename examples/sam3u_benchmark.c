@@ -91,7 +91,7 @@ static int benchmark_in(uint8_t ep)
 	if (ep == EP_ISO_IN)
 		num_iso_pack = 16;
 
-	xfr = libusb_alloc_transfer(num_iso_pack);
+	xfr = libusb_alloc_transfer(num_iso_pack,NULL);
 	if (!xfr)
 		return -ENOMEM;
 

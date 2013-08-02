@@ -1,149 +1,30 @@
+/* -*- Mode: C; indent-tabs-mode:t ; c-basic-offset:8 -*- */
 /*
- * Copyright 2012, Userful Corporation
+ * Allocation functions for libusbx
+ * Copyright © 2013 Stirling Westrup <swestrup@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#if defined(HAVE_CONFIG)
-  #include "config.h"
-#endif
 
-#if !defined(_GNU_SOURCE)
-  #define _GNU_SOURCE 1
-#endif
+#include "loggeri.h"
+
+#undef printf
+#undef fprintf
 
 #include <stdio.h>
 #include <string.h>
-
-#include "dl_policy.h"
-#include "macros.h"
-
-// AllocPolicy indirection functions.
-
-void *allocpolicy_alloc
-  ( AllocPolicy *pol
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , size_t       size
-  )
-  {
-    return pol->alloc(pol->pool, name, file, func, line, size, 1);
-  }
-
-void *allocpolicy_calloc
-  ( AllocPolicy *pol
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , size_t       size
-  , ulong	 count
-  )
-  {
-    return pol->alloc(pol->pool, name, file, func, line, size, count);
-  }
-
-void *allocpolicy_realloc
-  ( AllocPolicy *pol
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , void       * mem
-  , size_t       size
-  )
-  {
-    return pol->realloc(pol->pool, name, file, func, line, mem, size, 1);
-  }
-
-
-void *allocpolicy_recalloc
-  ( AllocPolicy *pol
-  , char const * name
-  , char const * file
-  , char const * func
-  , long	 line
-  , void       * mem
-  , size_t       size
-  , ulong	 count
-  )
-  {
-    return pol->realloc(pol->pool, name, file, func, line, mem, size, count);
-  }
-
-void allocpolicy_free
-  ( AllocPolicy *pol
-  , char const * file
-  , char const * func
-  , long	 line
-  , void       * mem
-  )
-  {
-    pol->free(pol->pool, file, func, line, mem);
-  }
-
-// Some additional convenience functions
-
-int allocpolicy_vasprintf
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char **       bufp
-  , const char *  format
-  , va_list       args
-  )
-  { va_list	 argsc;
-
-    va_copy(argsc, args);
-    int len = vsnprintf(NULL, 0, format, argsc) + 1;
-    va_end(argsc);
-
-    char *p = pol->alloc(pol->pool,name,file,func,line,sizeof(char),len);
-    if (!p)
-      return -1;
-
-    *bufp = p;
-    return vsnprintf(p, len, format, args);
-  }
-
-int allocpolicy_asprintf
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char **       bufp
-  , const char *  format
-  , ...
-  )
-  { va_list       args;
-
-    va_start(args, format);
-    int ret = allocpolicy_vasprintf(pol,name,file,func,line,bufp,format,args);
-    va_end(args);
-    return ret;
-  }
-
-char *allocpolicy_strdup
-  ( AllocPolicy * pol
-  , char const *  name
-  , char const *  file
-  , char const *  func
-  , long	  line
-  , char const *  str
-  )
-  { char *ret = NULL;
-
-    if( str )
-      { size_t len = strlen(str);
-
-	ret = pol->alloc(pol->pool, name,file,func,line,sizeof(char),len+1);
-	if( ret )
-	  strcpy(ret,str);
-      }
-    return ret;
-  }
 
 
 
@@ -192,6 +73,15 @@ void API_EXPORTED libusb_set_logger(libusb_context *ctx, libusb_logger *logger)
 {
 	USBI_GET_CONTEXT(ctx);
 	ctx->logger = logger;
+}
+
+/* This function can be used to set determine which logger is currently set on
+ * a given context.
+ */
+DEFAULT_VISIBILITY libusb_logger * API_EXPORTED libusb_get_logger(libusb_context *ctx)
+{
+	USBI_GET_CONTEXT(ctx);
+	return ctx->logger;
 }
 
 

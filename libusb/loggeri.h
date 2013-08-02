@@ -27,8 +27,19 @@
 #include "libusb.h"
 #include "libusbi.h"
 
-// These following functions make calls through a logpolicy to implement the
-// current logging policy.
+// This header file defines functions and macros for using the abstract
+// logging system inside libusb.
+
+// Macro to tell GCC that a function takes printf-like arguments. A is the
+// argument number (counting from 1) of the printf string, and B is the first
+// argument number to compare against the string (or 0 for none).
+#ifndef GCC_PRINTF
+# if __GNUC__
+#   define GCC_PRINTF(A,B) __attribute__ ((format (gnu_printf, A, B)))
+# else
+#   define GCC_PRINTF(A,B) /* nothing */
+# endif
+#endif
 
 extern libusb_logger * libusb_default_logger;
 

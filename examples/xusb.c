@@ -745,7 +745,7 @@ static void print_device_cap(struct libusb_bos_dev_capability_descriptor *dev_ca
 		if (usb_2_0_ext) {
 			printf("    USB 2.0 extension:\n");
 			printf("      attributes             : %02X\n", usb_2_0_ext->bmAttributes);
-			libusb_free_usb_2_0_extension_descriptor(usb_2_0_ext);
+			libusb_free_usb_2_0_extension_descriptor(NULL,usb_2_0_ext);
 		}
 		break;
 	}
@@ -757,7 +757,7 @@ static void print_device_cap(struct libusb_bos_dev_capability_descriptor *dev_ca
 			printf("      attributes             : %02X\n", ss_usb_device_cap->bmAttributes);
 			printf("      supported speeds       : %04X\n", ss_usb_device_cap->wSpeedSupported);
 			printf("      supported functionality: %02X\n", ss_usb_device_cap->bFunctionalitySupport);
-			libusb_free_ss_usb_device_capability_descriptor(ss_usb_device_cap);
+			libusb_free_ss_usb_device_capability_descriptor(NULL,ss_usb_device_cap);
 		}
 		break;
 	}
@@ -766,7 +766,7 @@ static void print_device_cap(struct libusb_bos_dev_capability_descriptor *dev_ca
 		libusb_get_container_id_descriptor(NULL, dev_cap, &container_id);
 		if (container_id) {
 			printf("    Container ID:\n      %s\n", uuid_to_string(container_id->ContainerID));
-			libusb_free_container_id_descriptor(container_id);
+			libusb_free_container_id_descriptor(NULL,container_id);
 		}
 		break;
 	}
@@ -837,7 +837,7 @@ static int test_device(uint16_t vid, uint16_t pid)
 		printf("%d caps\n", bos_desc->bNumDeviceCaps);
 		for (i = 0; i < bos_desc->bNumDeviceCaps; i++)
 			print_device_cap(bos_desc->dev_capability[i]);
-		libusb_free_bos_descriptor(bos_desc);
+		libusb_free_bos_descriptor(handle,bos_desc);
 	} else {
 		printf("no descriptor\n");
 	}
@@ -885,12 +885,12 @@ static int test_device(uint16_t vid, uint16_t pid)
 				if (ep_comp) {
 					printf("                 max burst: %02X   (USB 3.0)\n", ep_comp->bMaxBurst);
 					printf("        bytes per interval: %04X (USB 3.0)\n", ep_comp->wBytesPerInterval);
-					libusb_free_ss_endpoint_companion_descriptor(ep_comp);
+					libusb_free_ss_endpoint_companion_descriptor(NULL,ep_comp);
 				}
 			}
 		}
 	}
-	libusb_free_config_descriptor(conf_desc);
+	libusb_free_config_descriptor(dev,conf_desc);
 
 	libusb_set_auto_detach_kernel_driver(handle, 1);
 	for (iface = 0; iface < nb_ifaces; iface++)

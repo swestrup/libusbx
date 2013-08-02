@@ -40,7 +40,7 @@
 #include "version.h"
 
 /* Here we define a bunch of macros to help catch any attempt to bypass use of
-   the allocation plugin.
+   the allocation or logging systems.
 */
 #if defined(free)
 #undef free
@@ -74,17 +74,31 @@
 #undef vasnprintf
 #endif
 
-#define USBI_PASTE(a,b) a ## b
-#define USBI_NOT_ALLOWED(x) USBI_PASTE(x,_IS_NOT_ALLOWED_SEE_ALLOCATORI_DOT_H)
-#define free      USBI_NOT_ALLOWED(FREE)
-#define malloc    USBI_NOT_ALLOWED(MALLOC)
-#define calloc    USBI_NOT_ALLOWED(CALLOC)
-#define realloc   USBI_NOT_ALLOWED(REALLOC)
-#define strdup    USBI_NOT_ALLOWED(STRDUP)
-#define strndup   USBI_NOT_ALLOWED(STRNDUP)
-#define asprintf  USBI_NOT_ALLOWED(ASPRINTF)
-#define vasprintf USBI_NOT_ALLOWED(VASPRINTF)
+#if defined(printf)
+#undef printf
+#endif
 
+#if defined(fprintf)
+#undef fprintf
+#endif
+
+#if defined(vfprintf)
+#undef vfprintf
+#endif
+
+#define USBI_PASTE(a,b,c) a ## b ## c
+#define USBI_RESERVED(x,y) USBI_PASTE(x,_IS_RESERVED_FOR_USE_BY_,y)
+
+#define free      USBI_RESERVED(FREE,ALLOCATOR)
+#define malloc    USBI_RESERVED(MALLOC,ALLOCATOR)
+#define calloc    USBI_RESERVED(CALLOC,ALLOCATOR)
+#define realloc   USBI_RESERVED(REALLOC,ALLOCATOR)
+#define strdup    USBI_RESERVED(STRDUP,ALLOCATOR)
+#define strndup   USBI_RESERVED(STRNDUP,ALLOCATOR)
+#define asprintf  USBI_RESERVED(ASPRINTF,ALLOCATOR)
+#define vasprintf USBI_RESERVED(VASPRINTF,ALLOCATOR)
+#define printf    USBI_RESERVED(PRINTF,LOGGER)
+#define fprintf   USBI_RESERVED(FPRINTF,LOGGER)
 
 /* Inside the libusbx code, mark all public functions as follows:
  *   return_type API_EXPORTED function_name(params) { ... }
@@ -280,8 +294,8 @@ extern struct libusb_context *usbi_default_context;
 
 struct libusb_context {
 
-/*      int debug;        -- this is now the logger's domain */
-	int debug_fixed;
+	/* do we prevent changes to logging level */
+  	int debug_fixed;
 
         /* context-specific memory allocator */
         libusb_allocator * allocator;

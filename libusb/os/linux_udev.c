@@ -97,7 +97,7 @@ int linux_udev_start_event_monitor(libusb_context *ctx)
 		goto err_free_monitor;
 	}
 
-	r = usbi_pipe(udev_control_pipe);
+	r = usbi_pipe(ctx,udev_control_pipe);
 	if (r) {
 		usbi_err(NULL, "could not create udev control pipe");
 		goto err_free_monitor;

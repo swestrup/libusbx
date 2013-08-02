@@ -461,17 +461,6 @@ libusb_logger * LIBUSB_CALL libusb_context_get_logger(libusb_context *ctx)
 	return ctx->logger;
 }
 
-/** \ingroup lib
- * Returns the current allocator that is set in the given context.
- *
- * \param[in] ctx libusb context to get the logger from.
- * \returns a pointer to a libusb_allocator
- */
-libusb_allocator * LIBUSB_CALL libusb_context_get_allocator(libusb_context *ctx)
-{
-	return ctx->allocator;
-}
-
 
 
 /* we traverse usbfs without knowing how many devices we are going to find.

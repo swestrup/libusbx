@@ -33,6 +33,20 @@
 #include <stdarg.h>
 #include <string.h>
 
+/** \ingroup lib
+ * Returns the current allocator that is set in the given context.
+ *
+ * \param[in] ctx libusb context to get the logger from.
+ * \returns a pointer to a libusb_allocator
+ */
+DEFAULT_VISIBILITY libusb_allocator * LIBUSB_CALL libusb_get_allocator(
+	libusb_context *ctx
+)
+{
+	USBI_GET_CONTEXT(ctx);
+	return ctx->allocator;
+}
+
 static void * usbi_default_allocator_allocate(
 	void       * pool,
 	char const * label,

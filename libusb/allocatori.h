@@ -20,6 +20,7 @@
 #ifndef ALLOCATORI_H
 #define ALLOCATORI_H
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -67,6 +68,11 @@ static inline int usbi_allocator_asprintf(
 	...
 ) GCC_PRINTF(7,8);
 
+
+
+
+
+
 // This function make calls through an Allocator to implement the current
 // memory allocation policy. It is intended to be called through macros
 // that generate a display label for the generated object (often the type name
@@ -86,6 +92,7 @@ static inline void *usbi_allocator_allocate(
 	size_t		   size
 )
 {
+	assert(allocator != NULL);  
 	return allocator->allocate(allocator->pool,label,file,func,line,
 		usbi_gettimestamp(),mem,head,count,size);
 }
@@ -96,6 +103,7 @@ static inline void *usbi_allocator_walk(
 	void		          * visitorinfo
 )
 {
+	assert(allocator != NULL);  
 	return allocator->walk(allocator->pool,visitorinfo,visitor);
 }	
 
@@ -253,12 +261,12 @@ static inline char *usbi_allocator_strndup(
 
 // general allocation based on current context.
 #define usbi_allocate(ctx,lbl,mem,hdr,cnt,siz)		\
-  usbi_raw_allocate(libusb_context_get_allocator(ctx),lbl,mem,hdr,cnt,siz)
+  usbi_raw_allocate(libusb_get_allocator(ctx),lbl,mem,hdr,cnt,siz)
 
 // Reallocate-or-free a memory area holding an array
 #define usbi_recallocf(ctx,mem,cnt,atyp)	\
   usbi_allocator_reallocf			\
-    ( libusb_context_get_allocator(ctx)		\
+    ( libusb_get_allocator(ctx)		\
     , _USBI_LBL1(cnt,#atyp)			\
     , __FILE__, __FUNCTION__, __LINE__		\
     , mem, 0, cnt, sizeof(atyp)		        \
@@ -268,7 +276,7 @@ static inline char *usbi_allocator_strndup(
 // Reallocate-or-free a memory area with header and array
 #define usbi_rehcallocf(ctx,mem,htyp,cnt,atyp)	\
   usbi_allocator_reallocf			\
-    ( libusb_context_get_allocator(ctx)		\
+    ( libusb_get_allocator(ctx)		\
     , _USBI_HDR(htyp,atyp,cnt)			\
     , __FILE__, __FUNCTION__, __LINE__		\
     , mem, sizeof(htyp), cnt, sizeof(atyp)	\
@@ -278,7 +286,7 @@ static inline char *usbi_allocator_strndup(
 // allocate and return a formatted string.
 #define usbi_asprintf(ctx,...)			\
   usbi_allocator_asprintf			\
-    ( libusb_context_get_allocator(ctx)		\
+    ( libusb_get_allocator(ctx)		\
     , "asprintf(" #__VA_ARGS__ ")"		\
     , __FILE__, __FUNCTION__, __LINE__		\
     , __VA_ARGS__				\
@@ -287,7 +295,7 @@ static inline char *usbi_allocator_strndup(
 // Allocate and return a vprintf'ed string
 #define usbi_vasprintf(ctx,bufp,fmt,args)	\
   usbi_allocator_vasprintf			\
-    ( libusb_context_get_allocator(ctx)		\
+    ( libusb_get_allocator(ctx)		\
     , "vasprintf(" #fmt ", args)"		\
     , __FILE__, __FUNCTION__, __LINE__		\
     , fmt, args					\
@@ -296,7 +304,7 @@ static inline char *usbi_allocator_strndup(
 // Allocate and return the duplicate of a string.
 #define usbi_strdup(ctx,str)			\
   usbi_allocator_strdup			        \
-    ( libusb_context_get_allocator(ctx)		\
+    ( libusb_get_allocator(ctx)		\
     , "strdup(" #str ")"			\
     , __FILE__, __FUNCTION__, __LINE__		\
     , str					\
@@ -305,7 +313,7 @@ static inline char *usbi_allocator_strndup(
 // Allocate and return up to n characters of a string.
 #define usbi_strndup(ctx,str,n)			\
   usbi_allocator_strdup			        \
-    ( libusb_context_get_allocator(ctx)		\
+    ( libusb_get_allocator(ctx)		\
     , "strndup(" #str "," #n ")"		\
     , __FILE__, __FUNCTION__, __LINE__		\
     , str, n					\
