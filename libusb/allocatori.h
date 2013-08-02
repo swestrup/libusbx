@@ -188,7 +188,7 @@ static inline char *usbi_allocator_strdup(
 	if( ret )
 		strcpy(ret,str);
 	return ret;
-}	
+}
 	
 static inline char *usbi_allocator_strndup(
 	libusb_allocator	* allocator,
