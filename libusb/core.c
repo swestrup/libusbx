@@ -34,10 +34,6 @@
 #include <sys/time.h>
 #endif
 
-#ifdef __ANDROID__
-#include <android/log.h>
-#endif
-
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
@@ -449,19 +445,6 @@ libusb_free_device_list(list, 1);
  */
 
 /** @defgroup misc Miscellaneous */
-
-/** \ingroup lib
- * Returns the current logger that is set in the given context.
- *
- * \param[in] ctx libusb context to get the logger from.
- * \returns a pointer to a libusb_logger.
- */
-libusb_logger * LIBUSB_CALL libusb_context_get_logger(libusb_context *ctx)
-{
-	return ctx->logger;
-}
-
-
 
 /* we traverse usbfs without knowing how many devices we are going to find.
  * so we create this discovered_devs model which is similar to a linked-list
@@ -1812,7 +1795,6 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 		if( policy->allocator )
 			allocator = policy->allocator;
 	}
-		
 
 	usbi_mutex_static_lock(&default_context_lock);
 
@@ -2002,6 +1984,7 @@ void API_EXPORTED libusb_exit(struct libusb_context *ctx)
 	usbi_mutex_destroy(&ctx->open_devs_lock);
 	usbi_mutex_destroy(&ctx->usb_devs_lock);
 	usbi_mutex_destroy(&ctx->hotplug_cbs_lock);
+	usbi_logger_exit(ctx);  /* last, so de-init errors can be logged */
 	usbi_free(ctx,ctx);
 }
 

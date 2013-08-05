@@ -41,7 +41,40 @@ typedef enum libusb_log_level {
 	LIBUSB_LOG_LEVEL_TRACE
 } libusb_log_level;
 
-char const * usbi_log_level_str(libusb_log_level level);
+char const * LIBUSB_CALL libusb_log_level_str(libusb_log_level level);
+
+/** \ingroup log
+ *
+ * The type of an optional user-provided logger initialization function.
+ *
+ * Unlike allocators, which are assumed to have a greater lifespan than any
+ * context, and thus can be initialized and/or finalized in user-code before
+ * libusb_open and after libusb_close, loggers can be changed during the
+ * runtime of a context.
+ *
+ * This function (if non-null) is called on a logger when being installed in a
+ * context, so that any necessary internal initializations can be performed.
+ *
+ * \param[in] data logger-specific context data.
+ */
+typedef void libusb_logger_init_fn(
+	void		 * data
+);
+
+/** \ingroup log
+ *
+ * The type of an optional user-provided logger finalization function.
+ *
+ * This function (if non-null) is called on a logger while being removed from
+ * a context to inform it that it is no longer in use, so that any necessary
+ * internal clean-up work can be performed.
+ *
+ * \param[in] data logger-specific context data.
+ */
+typedef void libusb_logger_exit_fn(
+	void		 * data
+);
+
 
 /** \ingroup log
  *
@@ -137,22 +170,28 @@ typedef void libusb_logger_set_level_fn(
 
 typedef struct libusb_logger {
 	/** arbitrary log control data */
-	void 			      * data;
+	void				* data;
 
-        /** Start a new log entry */
-	libusb_logger_entry_begin_fn  * begin;
+	/** Initialize the logger for use */
+	libusb_logger_init_fn		* init;
+
+	/** Initialize the logger for use */
+	libusb_logger_exit_fn		* exit;
+
+	/** Start a new log entry */
+	libusb_logger_entry_begin_fn	* begin;
 
         /** Extend the current log entry with (more) data */
-        libusb_logger_entry_extend_fn * extend;	    
+        libusb_logger_entry_extend_fn	* extend;	    
 
         /** Finish the log entry */
-	libusb_logger_entry_end_fn    * end;
+	libusb_logger_entry_end_fn	* end;
 
 	/** get the current log level */
-        libusb_logger_get_level_fn    * get_level;
+        libusb_logger_get_level_fn	* get_level;
 
 	/** set the current log level */
-	libusb_logger_set_level_fn    * set_level;
+	libusb_logger_set_level_fn	* set_level;
 } libusb_logger;
 
 

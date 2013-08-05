@@ -64,7 +64,7 @@ libusb_1_0_la_LDFLAGS = $(LTLDFLAGS)
 libusb_1_0_la_SOURCES = libusbi.h core.c descriptor.c io.c strerror.c sync.c  \
 	os/linux_usbfs.h os/darwin_usb.h os/windows_usb.h os/windows_common.h \
 	hotplug.h hotplug.c allocator.h allocatori.h allocator.c logger.h     \
-	loggeri.h $(THREADS_SRC) $(OS_SRC) \
+	loggeri.h logger.c $(THREADS_SRC) $(OS_SRC) \
 	os/poll_posix.h os/poll_windows.h
 
 hdrdir = $(includedir)/libusb-1.0

@@ -99,7 +99,29 @@ static inline void libusb_logger_set_level(libusb_logger* logger, libusb_log_lev
 static inline libusb_log_level libusb_logger_get_level(libusb_logger* logger)
 {
 	return logger->get_level(logger->data);
+}
+
+static inline void libusb_logger_init(libusb_logger* logger)
+{
+	if( logger->init )
+		logger->init(logger->data);
 }	
+
+static inline void libusb_logger_exit(libusb_logger* logger)
+{
+	if( logger->exit )
+		logger->exit(logger->data);
+}	
+
+static inline void usbi_logger_init(libusb_context *ctx)
+{
+	libusb_logger_init(libusb_get_logger(ctx));
+}
+
+static inline void usbi_logger_exit(libusb_context *ctx)
+{
+	libusb_logger_exit(libusb_get_logger(ctx));
+}
 
 
 static inline void _usbi_log_v(
@@ -112,7 +134,7 @@ static inline void _usbi_log_v(
 	va_list			args
 )
 {
-	libusb_logger * logger = libusb_context_get_logger(ctx);
+	libusb_logger * logger = libusb_get_logger(ctx);
 
 	libusb_logger_entry_begin(logger,level,file,function,line);
 	libusb_logger_entry_extend_v(logger,format,args);
@@ -144,7 +166,7 @@ static inline void _usbi_trc(
 	long                    line
 )
 {
-	libusb_logger * logger = libusb_context_get_logger(ctx);
+	libusb_logger * logger = libusb_get_logger(ctx);
 
 	libusb_logger_entry_begin(logger,level,file,function,line);
 	libusb_logger_entry_end(logger);

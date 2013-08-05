@@ -78,6 +78,10 @@
 #undef printf
 #endif
 
+#if defined(vprintf)
+#undef vprintf
+#endif
+
 #if defined(fprintf)
 #undef fprintf
 #endif
@@ -99,6 +103,8 @@
 #define vasprintf USBI_RESERVED(VASPRINTF,ALLOCATOR)
 #define printf    USBI_RESERVED(PRINTF,LOGGER)
 #define fprintf   USBI_RESERVED(FPRINTF,LOGGER)
+#define vprintf   USBI_RESERVED(VPRINTF,LOGGER)
+#define vfprintf  USBI_RESERVED(VFPRINTF,LOGGER)
 
 /* Inside the libusbx code, mark all public functions as follows:
  *   return_type API_EXPORTED function_name(params) { ... }

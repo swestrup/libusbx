@@ -85,9 +85,6 @@ typedef unsigned long ulong;
 #endif
 #endif
 
-#include "allocator.h"
-#include "logger.h"
-
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
 #define LIBUSB_DEPRECATED_FOR(f) \
   __attribute__((deprecated("Use " #f " instead")))
@@ -132,6 +129,9 @@ typedef unsigned long ulong;
 #else
 #define LIBUSB_CALL
 #endif
+
+#include "allocator.h"
+#include "logger.h"
 
 /** \def LIBUSBX_API_VERSION
  * \ingroup misc
@@ -1987,6 +1987,14 @@ int LIBUSB_CALL libusb_hotplug_register_callback(libusb_context *ctx,
  */
 void LIBUSB_CALL libusb_hotplug_deregister_callback(libusb_context *ctx,
 						libusb_hotplug_callback_handle handle);
+
+
+
+
+libusb_allocator * LIBUSB_CALL libusb_get_allocator(libusb_context *ctx);
+libusb_logger *    LIBUSB_CALL libusb_get_logger(libusb_context *ctx);
+void 		   LIBUSB_CALL libusb_set_logger(libusb_context *ctx,libusb_logger *logger);
+
 
 #ifdef __cplusplus
 }

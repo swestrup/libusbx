@@ -244,5 +244,5 @@ static libusb_allocator usbi_debug_allocator = {
 };
 
 
-libusb_allocator * libusb_debug_allocator = &usbi_debug_allocator;
+libusb_allocator * libusb_debug_allocator   = &usbi_debug_allocator;
 libusb_allocator * libusb_default_allocator = &usbi_default_allocator;
