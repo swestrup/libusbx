@@ -908,6 +908,8 @@ static int initialize_device(struct libusb_device *dev, uint8_t busnum,
 	if (fd < 0)
 		return fd;
 
+	priv->descriptors = NULL;
+
 	do {
 		descriptors_size *= 2;
 		priv->descriptors = usbi_recallocf(ctx,priv->descriptors,

@@ -514,12 +514,11 @@ struct libusb_device *usbi_alloc_device(struct libusb_context *ctx,
 {
 	size_t priv_size = usbi_backend->device_priv_size;
 	struct libusb_device *dev = usbi_hallocz(ctx,struct libusb_device,priv_size);
-	int r;
-
 	if (!dev)
 		return NULL;
 
-	r = usbi_mutex_init(&dev->lock, NULL);
+	memset(dev,0,sizeof(libusb_device)+priv_size);
+	int r = usbi_mutex_init(&dev->lock, NULL);
 	if (r) {
 		usbi_free(ctx,dev);
 		return NULL;
@@ -1815,9 +1814,6 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 	}
 	// we replaced a calloc which returns zeroed memory, so...
 	memset(ctx,0,sizeof(libusb_context));
-#ifdef ENABLE_DEBUG_LOGGING
-	ctx->debug = LIBUSB_LOG_LEVEL_DEBUG;
-#endif
 
 #ifdef ENABLE_DEBUG_LOGGING
 	ctx->debug = LOG_LEVEL_DEBUG;
