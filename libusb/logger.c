@@ -26,34 +26,6 @@
 
 #ifdef __ANDROID__
 #include <android/log.h>
-#else
-/* Android log priority values, in ascending priority order. */
-typedef enum android_LogPriority {
-ANDROID_LOG_UNKNOWN = 0,
-ANDROID_LOG_DEFAULT, /* only for SetMinPriority() */
-ANDROID_LOG_VERBOSE,
-ANDROID_LOG_DEBUG,
-ANDROID_LOG_INFO,
-ANDROID_LOG_WARN,
-ANDROID_LOG_ERROR,
-ANDROID_LOG_FATAL,
-ANDROID_LOG_SILENT, /* only for SetMinPriority(); must be last */
-} android_LogPriority;
- 
-/** Send a simple string to the log. */
-int __android_log_write(int prio, const char *tag, const char *text);
- 
-/** Send a formatted string to the log, used like printf(fmt,...). */
-int __android_log_print(int prio, const char *tag, const char *fmt, ...);
- 
-/* A variant of __android_log_print() that takes a va_list to list additional parameters. */
-int __android_log_vprint(int prio, const char *tag, const char *fmt, va_list ap);
- 
-/*
-* Log an assertion failure and SIGTRAP the process to have a chance
-* to inspect it, if a debugger is attached. This uses the FATAL priority.
-*/
-void __android_log_assert(const char *cond, const char *tag, const char *fmt, ...);
 #endif
 
 #include "loggeri.h"
@@ -148,6 +120,11 @@ DEFAULT_VISIBILITY libusb_logger * LIBUSB_CALL libusb_get_logger(libusb_context 
 
 
 
+/* Android-specific default logger */
+#ifdef __ANDROID__
+
+#define USBI_ANDROID_BUFFER_SIZE USBI_MAX_LOG_LEN
+
 /* This is a variant of snprintf that is guaranteed to not output more than
    *len characters of output, including a trailing '\0'. It returns a boolean
    indicating whether the output had to be truncated. The first two parameters
@@ -183,18 +160,13 @@ static int usbi_bufprintf(
 	return ret;
 }
 
-/* Android-specific default logger */
-#ifndef __ANDROID__
-
-#define USBI_ANDROID_BUFFER_SIZE USBI_MAX_LOG_LEN
-
 typedef struct usbi_android_logger_log {
 	usbi_mutex_static_t	mutex;
 	libusb_log_level	level;
 	int			started;
 	int		   	prio;
 	char			buffer[USBI_ANDROID_BUFFER_SIZE];
-	int			space;
+	size_t			space;
 	char		      * ptr;
 } usbi_android_logger_log;
 
@@ -291,7 +263,7 @@ static void usbi_android_logger_set_level(
 {
 	usbi_android_logger_log * log = data;
 
-	log->data = level;
+	log->level = level;
 }
 	
 
@@ -306,7 +278,7 @@ static libusb_logger usbi_android_logger = {
 	.set_level = usbi_android_logger_set_level
 };
 
-extern libusb_logger * libusb_default_logger = &usbi_android_logger;
+libusb_logger * libusb_default_logger = &usbi_android_logger;
 
 #else
 
@@ -417,7 +389,7 @@ static void usbi_default_logger_set_level(
 {
 	usbi_default_logger_log * log = data;
 
-	log->data = level;
+	log->level = level;
 }
 	
 
@@ -432,186 +404,7 @@ static libusb_logger usbi_default_logger = {
 	.set_level = usbi_default_logger_set_level
 };
 
-extern libusb_logger * libusb_default_logger = &usbi_default_logger;
+libusb_logger * libusb_default_logger = &usbi_default_logger;
 
 #endif
-
-
-void usbi_default_logger(libusb_context *ctx, void *logdata,
-	double stamp, int level, char const *prefix, char const * function,
-	char const * format, va_list args)
-{
-	FILE *stream = (level == LIBUSB_LOG_LEVEL_INFO) ? stdout : stderr;
-
-	fprintf(stream, "libusb: %12.6f %s [%s] ", stamp, prefix, function);
-
-	vfprintf(stream, format, args);
-
-	fprintf(stream, "\n");
-}
-
-void usbi_log_v(struct libusb_context *ctx, enum libusb_log_level level,
-	const char *function, const char *format, va_list args)
-{
-	const char *prefix;
-	struct timeval now;
-	static struct timeval first = { 0, 0 };
-
-	USBI_GET_CONTEXT(ctx);
-	if (ctx->debug < 4-level)
-		return;
-
-	usbi_gettimeofday(&now, NULL);
-	if (!first.tv_sec) {
-		first.tv_sec = now.tv_sec;
-		first.tv_usec = now.tv_usec;
-	}
-	if (now.tv_usec < first.tv_usec) {
-		now.tv_sec--;
-		now.tv_usec += 1000000;
-	}
-	now.tv_sec -= first.tv_sec;
-	now.tv_usec -= first.tv_usec;
-
-	double stamp = (double)now.tv_sec + (((double)now.tv_usec)/1000000.0);
-
-	switch (level) {
-	case LIBUSB_LOG_LEVEL_INFO:
-		prefix = "info";
-		break;
-	case LIBUSB_LOG_LEVEL_WARNING:
-		prefix = "warning";
-		break;
-	case LIBUSB_LOG_LEVEL_ERROR:
-		prefix = "error";
-		break;
-	case LIBUSB_LOG_LEVEL_DEBUG:
-		prefix = "debug";
-		break;
-	default:
-		prefix = "unknown";
-		break;
-	}
-
-	ctx->logger(ctx, ctx->logdata, stamp, level, prefix, function,
-		format, args);
-}
-
-void usbi_log(struct libusb_context *ctx, usbi_log_level level,
-	const char *function, const char *format, ...)
-{
-	va_list args;
-
-	va_start (args, format);
-	usbi_log_v(ctx, level, function, format, args);
-	va_end (args);
-}
-
-static void usbi_log_str(struct libusb_context *ctx, const char * str)
-{
-	UNUSED(ctx);
-	fputs(str, stderr);
-}
-
-void usbi_log_v(struct libusb_context *ctx, enum libusb_log_level level,
-	const char *function, const char *format, va_list args)
-{
-	const char *prefix = "";
-	char buf[USBI_MAX_LOG_LEN];
-	struct timeval now;
-	int global_debug, header_len, text_len;
-	static int has_debug_header_been_displayed = 0;
-
-#ifdef ENABLE_DEBUG_LOGGING
-	global_debug = 1;
-	UNUSED(ctx);
-#else
-	USBI_GET_CONTEXT(ctx);
-	if (ctx == NULL)
-		return;
-	global_debug = (ctx->debug == LIBUSB_LOG_LEVEL_DEBUG);
-	if (!ctx->debug)
-		return;
-	if (level == LIBUSB_LOG_LEVEL_WARNING && ctx->debug < LIBUSB_LOG_LEVEL_WARNING)
-		return;
-	if (level == LIBUSB_LOG_LEVEL_INFO && ctx->debug < LIBUSB_LOG_LEVEL_INFO)
-		return;
-	if (level == LIBUSB_LOG_LEVEL_DEBUG && ctx->debug < LIBUSB_LOG_LEVEL_DEBUG)
-		return;
-#endif
-
-	usbi_gettimeofday(&now, NULL);
-	if ((global_debug) && (!has_debug_header_been_displayed)) {
-		has_debug_header_been_displayed = 1;
-		usbi_log_str(ctx, "[timestamp] [threadID] facility level [function call] <message>\n");
-		usbi_log_str(ctx, "--------------------------------------------------------------------------------\n");
-	}
-	if (now.tv_usec < timestamp_origin.tv_usec) {
-		now.tv_sec--;
-		now.tv_usec += 1000000;
-	}
-	now.tv_sec -= timestamp_origin.tv_sec;
-	now.tv_usec -= timestamp_origin.tv_usec;
-
-	switch (level) {
-	case LIBUSB_LOG_LEVEL_INFO:
-		prefix = "info";
-		break;
-	case LIBUSB_LOG_LEVEL_WARNING:
-		prefix = "warning";
-		break;
-	case LIBUSB_LOG_LEVEL_ERROR:
-		prefix = "error";
-		break;
-	case LIBUSB_LOG_LEVEL_DEBUG:
-		prefix = "debug";
-		break;
-	case LIBUSB_LOG_LEVEL_NONE:
-		break;
-	default:
-		prefix = "unknown";
-		break;
-	}
-
-	if (global_debug) {
-		header_len = snprintf(buf, sizeof(buf),
-			"[%2d.%06d] [%08x] libusbx: %s [%s] ",
-			(int)now.tv_sec, (int)now.tv_usec, usbi_get_tid(), prefix, function);
-	} else {
-		header_len = snprintf(buf, sizeof(buf),
-			"libusbx: %s [%s] ", prefix, function);
-	}
-
-	if (header_len < 0 || header_len >= sizeof(buf)) {
-		/* Somehow snprintf failed to write to the buffer,
-		 * remove the header so something useful is output. */
-		header_len = 0;
-	}
-	/* Make sure buffer is NUL terminated */
-	buf[header_len] = '\0';
-	text_len = vsnprintf(buf + header_len, sizeof(buf) - header_len,
-		format, args);
-	if (text_len < 0 || text_len + header_len >= sizeof(buf)) {
-		/* Truncated log output. On some platforms a -1 return value means
-		 * that the output was truncated. */
-		text_len = sizeof(buf) - header_len;
-	}
-	if (header_len + text_len + sizeof(USBI_LOG_LINE_END) >= sizeof(buf)) {
-		/* Need to truncate the text slightly to fit on the terminator. */
-		text_len -= (header_len + text_len + sizeof(USBI_LOG_LINE_END)) - sizeof(buf);
-	}
-	strcpy(buf + header_len + text_len, USBI_LOG_LINE_END);
-
-	usbi_log_str(ctx, buf);
-}
-
-void usbi_log(struct libusb_context *ctx, enum libusb_log_level level,
-	const char *function, const char *format, ...)
-{
-	va_list args;
-
-	va_start (args, format);
-	usbi_log_v(ctx, level, function, format, args);
-	va_end (args);
-}
 

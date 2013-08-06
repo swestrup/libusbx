@@ -173,8 +173,8 @@ static inline void _usbi_trc(
 }
 
 #define usbi_trc(ctx)   _usbi_trc(ctx, LIBUSB_LOG_LEVEL_TRACE,__FILE__,__FUNCTION__,__LINE_)
-#define usbi_log_set_level(ctx,lvl) libusb_logger_set_level(libusb_context_get_logger(ctx),lvl)
-#define usbi_log_get_level(ctx)     libusb_logger_get_level(libusb_context_get_logger(ctx))
+#define usbi_log_set_level(ctx,lvl) libusb_logger_set_level(libusb_get_logger(ctx),lvl)
+#define usbi_log_get_level(ctx)     libusb_logger_get_level(libusb_get_logger(ctx))
 
 #if !defined(_MSC_VER) || _MSC_VER >= 1400
 

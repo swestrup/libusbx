@@ -1341,11 +1341,9 @@ typedef struct libusb_policy {
 } libusb_policy;
 
 
-void LIBUSB_CALL libusb_context_set_logger(libusb_context *ctx,
-	libusb_logger *logger);
-
-libusb_logger * LIBUSB_CALL libusb_context_get_logger(libusb_context *ctx);
-libusb_allocator * LIBUSB_CALL libusb_context_get_allocator(libusb_context *ctx);
+void LIBUSB_CALL libusb_set_logger(libusb_context *ctx, libusb_logger *logger);
+libusb_logger *    LIBUSB_CALL libusb_get_logger(libusb_context *ctx);
+libusb_allocator * LIBUSB_CALL libusb_get_allocator(libusb_context *ctx);
 
 int LIBUSB_CALL libusb_init_full(libusb_context **ctx, libusb_policy *policy);
   
