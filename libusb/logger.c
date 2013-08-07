@@ -287,15 +287,17 @@ typedef struct usbi_default_logger_log {
 	libusb_log_level	  level;
 	int			  header;
 	int			  started;
+	int			  refcount;
 	FILE		        * stream;
 } usbi_default_logger_log;
 
 static usbi_default_logger_log default_log = {
-	.mutex   = USBI_MUTEX_INITIALIZER,
-	.level   = LIBUSB_LOG_LEVEL_NONE,
-	.header  = false,
-	.started = false,
-	.stream  = NULL
+	.mutex    = USBI_MUTEX_INITIALIZER,
+	.level    = LIBUSB_LOG_LEVEL_NONE,
+	.header   = false,
+	.started  = false,
+	.refcount = 0,
+	.stream   = NULL
 };
 
 static void usbi_default_logger_init(
@@ -303,7 +305,23 @@ static void usbi_default_logger_init(
 )
 {
 	usbi_default_logger_log * log = data;
-	log->header = false;
+
+	usbi_mutex_lock(&log->mutex);
+
+	if( ++log->refcount == 1)
+		log->header = false;
+	usbi_mutex_unlock(&log->mutex);
+}
+
+static void usbi_default_logger_exit(
+	void		 * data
+)
+{
+	usbi_default_logger_log * log = data;
+
+	usbi_mutex_lock(&log->mutex);
+	--log->refcount;
+	usbi_mutex_unlock(&log->mutex);
 }
 
 static void usbi_default_logger_header(
@@ -336,7 +354,7 @@ static void usbi_default_logger_entry_begin(
 	char const	* prefix = libusb_log_level_str(level);
 	int 		  tid    = usbi_get_tid();
 	
-	if( level >= LIBUSB_LOG_LEVEL_DEBUG ) {
+	if( log->level >= LIBUSB_LOG_LEVEL_DEBUG ) {
 		if( !log->header )
 			usbi_default_logger_header(log);
 		fprintf(log->stream, "[%9.06f] [%08x] ", stamp, tid);
@@ -396,7 +414,7 @@ static void usbi_default_logger_set_level(
 static libusb_logger usbi_default_logger = {
 	.data      = &default_log,
 	.init      = usbi_default_logger_init,
-	.exit      = NULL,
+	.exit      = usbi_default_logger_exit,
 	.begin     = usbi_default_logger_entry_begin,
 	.extend    = usbi_default_logger_entry_extend,
 	.end       = usbi_default_logger_entry_end,
