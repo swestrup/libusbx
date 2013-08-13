@@ -172,7 +172,7 @@ static inline void _usbi_trc(
 	libusb_logger_entry_end(logger);
 }
 
-#define usbi_trc(ctx)   _usbi_trc(ctx, LIBUSB_LOG_LEVEL_TRACE,__FILE__,__FUNCTION__,__LINE_)
+#define usbi_trc(ctx)   _usbi_trc(ctx, LIBUSB_LOG_LEVEL_TRACE,__FILE__,__FUNCTION__,__LINE__)
 #define usbi_log_set_level(ctx,lvl) libusb_logger_set_level(libusb_get_logger(ctx),lvl)
 #define usbi_log_get_level(ctx)     libusb_logger_get_level(libusb_get_logger(ctx))
 
@@ -186,6 +186,14 @@ static inline void _usbi_trc(
 #define usbi_info(ctx, ...) usbi_log(ctx, LIBUSB_LOG_LEVEL_INFO,    __VA_ARGS__)
 
 #else /* !defined(_MSC_VER) || _MSC_VER >= 1400 */
+
+/* Old MS compilers don't support variadic macros. The code is simple, so we
+ * repeat it for each loglevel. Note that the debug case is now uniform with
+ * the other cases.
+ *
+ * Support for variadic macros was introduced in Visual C++ 2005.
+ * http://msdn.microsoft.com/en-us/library/ms177415%28v=VS.80%29.aspx
+ */
 
 #ifdef ENABLE_LOGGING
 #define USBI_MSC_LOG_BODY(ctx,fmt,lvl)	{				\

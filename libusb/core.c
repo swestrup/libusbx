@@ -604,10 +604,12 @@ int usbi_sanitize_device(struct libusb_device *dev)
 
 	num_configurations = dev->device_descriptor.bNumConfigurations;
 	if (num_configurations > USB_MAXCONFIG) {
-		usbi_err(DEVICE_CTX(dev), "too many configurations");
+		usbi_err(DEVICE_CTX(dev),
+			"too many configurations");
 		return LIBUSB_ERROR_IO;
 	} else if (0 == num_configurations)
-		usbi_dbg("zero configurations, maybe an unauthorized device");
+		usbi_dbg(DEVICE_CTX(dev),
+			"zero configurations, maybe an unauthorized device");
 
 	dev->num_configurations = num_configurations;
 	return 0;
@@ -1469,7 +1471,7 @@ int API_EXPORTED libusb_claim_interface(libusb_device_handle *dev,
 {
 	int r = 0;
 
-	usbi_dbg("interface %d", interface_number);
+	usbi_dbg(HANDLE_CTX(dev),"interface %d", interface_number);
 	if (interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
@@ -1513,7 +1515,7 @@ int API_EXPORTED libusb_release_interface(libusb_device_handle *dev,
 {
 	int r;
 
-	usbi_dbg("interface %d", interface_number);
+	usbi_dbg(HANDLE_CTX(dev),"interface %d", interface_number);
 	if (interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
@@ -1781,7 +1783,6 @@ int API_EXPORTED libusb_set_auto_detach_kernel_driver(
 int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *policy)
 {
 	struct libusb_device *dev, *next;
-	char *dbg = getenv("LIBUSB_DEBUG");
 	struct libusb_context *ctx;
 	static int first_init = 1;
 	int r = 0;
@@ -1801,7 +1802,8 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 		usbi_gettimeofday(&timestamp_origin, NULL);
 	}
 	if (!context && usbi_default_context) {
-		usbi_dbg("reusing default context");
+		ctx = usbi_default_context;
+		usbi_dbg(ctx,"reusing default context");
 		default_context_refcnt++;
 		usbi_mutex_static_unlock(&default_context_lock);
 		return 0;
@@ -1814,21 +1816,24 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 	}
 	// we replaced a calloc which returns zeroed memory, so...
 	memset(ctx,0,sizeof(libusb_context));
+	ctx->logger    = logger;
+	ctx->allocator = allocator;
 
 #ifdef ENABLE_DEBUG_LOGGING
-	ctx->debug = LOG_LEVEL_DEBUG;
+	usbi_log_set_level(ctx,LOG_LEVEL_DEBUG);
 	ctx->debug_fixed = 1;
 	usbi_dbg(ctx,"Logging active due to --enable-debug-log")
 #else
 	char *dbg = getenv("LIBUSB_DEBUG");
 	if (dbg) {
-		ctx->debug = atoi(dbg);
-		if (ctx->debug) {
-			ctx->debug_fixed = 1;
+		int level = atoi(dbg);
+		if (level) {
+			usbi_log_set_level(ctx,level);
 			usbi_dbg(ctx,"Logging active due to LIBUSB_DEBUG");
 			ctx->debug_fixed = 1;
 		}
 	}
+#endif
 
 	/* default context should be initialized before calling usbi_dbg */
 	if (!usbi_default_context) {
@@ -1943,11 +1948,11 @@ void API_EXPORTED libusb_exit(struct libusb_context *ctx)
 	usbi_mutex_static_lock(&default_context_lock);
 	if (ctx == usbi_default_context) {
 		if (--default_context_refcnt > 0) {
-			usbi_dbg("not destroying default context");
+			usbi_dbg(ctx,"not destroying default context");
 			usbi_mutex_static_unlock(&default_context_lock);
 			return;
 		}
-		usbi_dbg("destroying default context");
+		usbi_dbg(ctx,"destroying default context");
 		usbi_default_context = NULL;
 	}
 	usbi_mutex_static_unlock(&default_context_lock);
@@ -2144,16 +2149,6 @@ DEFAULT_VISIBILITY const char * LIBUSB_CALL libusb_error_name(int error_code)
 	default:
 		return "**UNKNOWN**";
 	}
-}
-
-/** \ingroup misc
- * Returns a pointer to const struct libusb_version with the version
- * (major, minor, micro, nano and rc) of the running library.
- */
-DEFAULT_VISIBILITY
-const struct libusb_version * LIBUSB_CALL libusb_get_version(void)
-{
-	return &libusb_version_internal;
 }
 
 /** \ingroup misc

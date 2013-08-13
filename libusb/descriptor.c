@@ -676,7 +676,7 @@ int API_EXPORTED libusb_get_active_config_descriptor(libusb_device *dev,
 	if (r >= 0)
 		r = raw_desc_to_config(dev->ctx, buf, r, host_endian, config);
 
-	free(buf);
+	usbi_free(dev->ctx,buf);
 	return r;
 }
 
@@ -729,7 +729,7 @@ int API_EXPORTED libusb_get_config_descriptor(libusb_device *dev,
 	if (r >= 0)
 		r = raw_desc_to_config(dev->ctx, buf, r, host_endian, config);
 
-	free(buf);
+	usbi_free(dev->ctx,buf);
 	return r;
 }
 

@@ -1516,7 +1516,7 @@ int API_EXPORTED libusb_cancel_transfer(struct libusb_transfer *transfer)
 		LIBUSB_TRANSFER_TO_USBI_TRANSFER(transfer);
 	int r;
 
-	usbi_dbg("");
+	usbi_trc(TRANSFER_CTX(transfer));
 	usbi_mutex_lock(&itransfer->lock);
 	r = usbi_backend->cancel_transfer(itransfer);
 	if (r < 0) {
@@ -1563,7 +1563,7 @@ int usbi_handle_transfer_completion(struct usbi_transfer *itransfer,
 
 	usbi_mutex_lock(&ctx->flying_transfers_lock);
 	list_del(&itransfer->list);
-	if (usbi_using_timerfd(ctx)) {
+	if (usbi_using_timerfd(ctx))
 		r = arm_timerfd_for_next_timeout(ctx);
 	usbi_mutex_unlock(&ctx->flying_transfers_lock);
 	if (usbi_using_timerfd(ctx) && (r < 0))
@@ -1969,7 +1969,7 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 
 	/* TODO: malloc when number of fd's changes, not on every poll */
 	if (nfds != 0)
-		fds = malloc(sizeof(*fds) * nfds);
+		fds = usbi_calloc(ctx,nfds,struct pollfd);
 	if (!fds) {
 		usbi_mutex_unlock(&ctx->pollfds_lock);
 		return LIBUSB_ERROR_NO_MEM;
@@ -1991,9 +1991,9 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 	if (tv->tv_usec % 1000)
 		timeout_ms++;
 
-	usbi_dbg("poll() %d fds with timeout in %dms", nfds, timeout_ms);
+	usbi_dbg(ctx, "poll() %d fds with timeout in %dms", nfds, timeout_ms);
 	r = usbi_poll(fds, nfds, timeout_ms);
-	usbi_dbg("poll() returned %d", r);
+	usbi_dbg(ctx,"poll() returned %d", r);
 	if (r == 0) {
 		usbi_free(ctx,fds);
 		return handle_timeouts(ctx);
@@ -2374,7 +2374,7 @@ int API_EXPORTED libusb_get_next_timeout(libusb_context *ctx,
 	usbi_mutex_lock(&ctx->flying_transfers_lock);
 	if (list_empty(&ctx->flying_transfers)) {
 		usbi_mutex_unlock(&ctx->flying_transfers_lock);
-		usbi_dbg("no URBs, no timeout!");
+		usbi_dbg(ctx,"no URBs, no timeout!");
 		return 0;
 	}
 
@@ -2393,7 +2393,7 @@ int API_EXPORTED libusb_get_next_timeout(libusb_context *ctx,
 	usbi_mutex_unlock(&ctx->flying_transfers_lock);
 
 	if (!found) {
-		usbi_dbg("no URB with timeout or all handled by OS; no timeout!");
+		usbi_dbg(ctx,"no URB with timeout or all handled by OS; no timeout!");
 		return 0;
 	}
 
@@ -2407,7 +2407,7 @@ int API_EXPORTED libusb_get_next_timeout(libusb_context *ctx,
 	TIMESPEC_TO_TIMEVAL(&cur_tv, &cur_ts);
 
 	if (!timercmp(&cur_tv, next_timeout, <)) {
-		usbi_dbg("first timeout already expired");
+		usbi_dbg(ctx,"first timeout already expired");
 		timerclear(tv);
 	} else {
 		timersub(next_timeout, &cur_tv, tv);
@@ -2475,7 +2475,7 @@ void usbi_remove_pollfd(struct libusb_context *ctx, int fd)
 	struct usbi_pollfd *ipollfd;
 	int found = 0;
 
-	usbi_dbg("remove fd %d", fd);
+	usbi_dbg(ctx,"remove fd %d", fd);
 	usbi_mutex_lock(&ctx->pollfds_lock);
 	list_for_each_entry(ipollfd, &ctx->pollfds, list, struct usbi_pollfd)
 		if (ipollfd->pollfd.fd == fd) {
@@ -2484,7 +2484,7 @@ void usbi_remove_pollfd(struct libusb_context *ctx, int fd)
 		}
 
 	if (!found) {
-		usbi_dbg("couldn't find fd %d to remove", fd);
+		usbi_dbg(ctx,"couldn't find fd %d to remove", fd);
 		usbi_mutex_unlock(&ctx->pollfds_lock);
 		return;
 	}

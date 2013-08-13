@@ -103,7 +103,7 @@ int linux_udev_start_event_monitor(libusb_context *ctx)
 		goto err_free_monitor;
 	}
 
-	r = pthread_create(&linux_event_thread, NULL, linux_udev_event_thread_main, NULL);
+	r = pthread_create(&linux_event_thread, NULL, linux_udev_event_thread_main, ctx);
 	if (r) {
 		usbi_err(NULL, "creating hotplug event thread (%d)", r);
 		goto err_close_pipe;
@@ -161,6 +161,7 @@ int linux_udev_stop_event_monitor(void)
 
 static void *linux_udev_event_thread_main(void *arg)
 {
+	libusb_context * ctx = arg;
 	char dummy;
 	int r;
 	struct udev_device* udev_dev;
@@ -186,7 +187,7 @@ static void *linux_udev_event_thread_main(void *arg)
 			usbi_mutex_static_lock(&linux_hotplug_lock);
 			udev_dev = udev_monitor_receive_device(udev_monitor);
 			if (udev_dev)
-				udev_hotplug_event(udev_dev);
+				udev_hotplug_event(ctx,udev_dev);
 			usbi_mutex_static_unlock(&linux_hotplug_lock);
 		}
 	}
