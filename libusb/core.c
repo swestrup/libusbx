@@ -1819,9 +1819,10 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 	ctx->logger    = logger;
 	ctx->allocator = allocator;
 
+	usbi_logger_init(ctx);
+
 #ifdef ENABLE_DEBUG_LOGGING
 	usbi_log_set_level(ctx,LOG_LEVEL_DEBUG);
-	ctx->debug_fixed = 1;
 	usbi_dbg(ctx,"Logging active due to --enable-debug-log")
 #else
 	char *dbg = getenv("LIBUSB_DEBUG");
@@ -1842,15 +1843,9 @@ int API_EXPORTED libusb_init_full(libusb_context **context, libusb_policy *polic
 		usbi_dbg(ctx,"created default context");
 	}
 
-	usbi_dbg(ctx,"libusbx v%d.%d.%d.%d", libusb_version_internal.major, libusb_version_internal.minor,
-		libusb_version_internal.micro, libusb_version_internal.nano);
-
-#ifdef ENABLE_DEBUG_LOGGING
-	usbi_dbg(ctx,"Logging active due to --enable-debug-log");
-#else
-	if( usbi_log_get_level(ctx) )
-	  usbi_dbg(ctx,"Logging active due to LIBUSB_DEBUG");
-#endif
+	usbi_dbg(ctx,"libusbx v%d.%d.%d.%d", libusb_version_internal.major,
+		libusb_version_internal.minor, libusb_version_internal.micro,
+		libusb_version_internal.nano);
 
 	usbi_mutex_init(&ctx->usb_devs_lock, NULL);
 	usbi_mutex_init(&ctx->open_devs_lock, NULL);
@@ -1942,6 +1937,7 @@ void API_EXPORTED libusb_exit(struct libusb_context *ctx)
 	struct libusb_device *dev, *next;
 
 	USBI_GET_CONTEXT(ctx);
+	usbi_trc(ctx);
 
 	/* if working with default context, only actually do the deinitialization
 	 * if we're the last user */
@@ -2153,7 +2149,7 @@ DEFAULT_VISIBILITY const char * LIBUSB_CALL libusb_error_name(int error_code)
 
 /** \ingroup misc
  * Returns a pointer to const struct libusb_version with the version
- * (major, minor, micro, rc, and nano) of the running library.
+ * (major, minor, micro, nano and rc) of the running library.
  */
 DEFAULT_VISIBILITY
 const struct libusb_version * LIBUSB_CALL libusb_get_version(void)

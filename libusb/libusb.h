@@ -24,11 +24,6 @@
 #ifndef LIBUSB_H
 #define LIBUSB_H
 
-#if defined(strdup)
-  #undef strdup
-#endif
-
-
 #ifdef _MSC_VER
 /* on MS environments, the inline keyword is available in C++ only */
 #if !defined(__cplusplus)

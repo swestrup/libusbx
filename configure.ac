@@ -67,11 +67,6 @@ case $host in
 	;;
 *-netbsd*)
 	AC_MSG_RESULT([NetBSD (using OpenBSD backend)])
-	backend="bsd"
-	threads="posix"
-	;;
-*-netbsd*)
-	AC_MSG_RESULT([NetBSD (using OpenBSD backend)])
 	backend="openbsd"
 	;;
 *-mingw*)

@@ -1186,7 +1186,7 @@ static int usbfs_get_device_list(struct libusb_context *ctx)
 		} else {
 			busnum = atoi(entry->d_name);
 			if (busnum == 0) {
-				usbi_dbg("unknown dir entry %s", entry->d_name);
+				usbi_dbg(ctx,"unknown dir entry %s", entry->d_name);
 				continue;
 			}
 
